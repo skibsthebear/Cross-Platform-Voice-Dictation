@@ -12,6 +12,7 @@ import os
 import sys
 import threading
 import time
+import pyperclip
 from datetime import datetime
 from pynput import keyboard
 from pynput.keyboard import Key, Controller
@@ -121,6 +122,11 @@ def save_and_transcribe():
                 result = response.json()
                 text = result.get('text', '').strip()
                 
+                # Remove line breaks and clean up spacing
+                text = text.replace('\n', ' ').replace('\r', ' ')
+                # Collapse multiple spaces into single space
+                text = ' '.join(text.split())
+                
                 if text:
                     print(f"📝 Transcription: {text}")
                     type_text(text)
@@ -142,19 +148,27 @@ def save_and_transcribe():
         pass
 
 def type_text(text):
-    """Type the transcribed text at current cursor position"""
+    """Copy text to clipboard and paste at current cursor position"""
     if not text:
         return
     
-    print("⌨️  Typing text...")
+    print("📋 Copying to clipboard and pasting...")
+    
+    # Copy text to clipboard
+    pyperclip.copy(text)
     
     # Small delay to ensure window focus
     time.sleep(0.1)
     
-    # Type the text
-    keyboard_controller.type(text)
+    # Paste using Ctrl+Shift+V (or Cmd+Shift+V on macOS)
+    keyboard_controller.press(Key.ctrl)
+    keyboard_controller.press(Key.shift)
+    keyboard_controller.press('v')
+    keyboard_controller.release('v')
+    keyboard_controller.release(Key.shift)
+    keyboard_controller.release(Key.ctrl)
     
-    print("✅ Text typed!")
+    print("✅ Text pasted!")
 
 def toggle_recording():
     """Toggle recording on/off"""
