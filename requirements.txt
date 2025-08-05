@@ -6,3 +6,4 @@ pyperclip
 python-dotenv
 openai
 PyQt6
+requests

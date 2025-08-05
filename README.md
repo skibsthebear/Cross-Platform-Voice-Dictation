@@ -1,9 +1,10 @@
-# Voice Typing - Cross-Platform Push-to-Talk Dictation Tool
+# Voice Typing & AI Fix - Cross-Platform Push-to-Talk Dictation and Text Formatting Tool
 
-A powerful, cross-platform voice typing application that uses push-to-talk functionality to transcribe speech in real-time. Supports both OpenAI's Whisper API and local GPU-accelerated transcription using distil-whisper models.
+A powerful, cross-platform voice typing application with AI-powered text formatting. Features push-to-talk functionality to transcribe speech in real-time and intelligent text correction for highlighted text. Supports both OpenAI's Whisper API and local GPU-accelerated transcription using distil-whisper models.
 
 ## 🌟 Features
 
+### Voice Typing (Alt+R)
 - **Push-to-Talk Recording**: Press `Alt+R` to start/stop recording
 - **Dual Transcription Modes**: 
   - **API Mode**: Uses OpenAI's Whisper API (requires API key)
@@ -12,7 +13,18 @@ A powerful, cross-platform voice typing application that uses push-to-talk funct
 - **Visual Recording Indicator**: Shows a floating indicator while recording
 - **Smart Device Selection**: Choose your preferred microphone with actual device names
 - **Long-Form Audio Support**: Handles recordings of any length
+
+### AI Fix (Alt+G)
+- **Intelligent Text Formatting**: Press `Alt+G` to format highlighted text
+- **Context-Aware Processing**: Understands and maintains text structure
+- **Smart Conversions**: Converts spoken formats like "dot com" → ".com"
+- **Professional Formatting**: Fixes grammar, spelling, and punctuation
+- **Email & List Formatting**: Adds appropriate line breaks for better structure
+- **Real-Time Streaming**: Shows progress as AI processes your text
+
+### General
 - **Cross-Platform**: Works on Linux, Windows, and macOS
+- **Dual Feature Access**: Both tools run simultaneously for seamless workflow
 
 ## 📋 Requirements
 
@@ -29,6 +41,10 @@ A powerful, cross-platform voice typing application that uses push-to-talk funct
 - NVIDIA GPU with CUDA support (recommended) or CPU
 - ~1.5GB disk space for model download
 - PyTorch with CUDA support
+
+### AI Fix Requirements
+- LM Studio running on `http://127.0.0.1:1234`
+- Any LLM model loaded in LM Studio (default: liquid/lfm2-1.2b)
 
 ## 🚀 Quick Start
 
@@ -64,7 +80,15 @@ echo "OPENAI_API_KEY=your-api-key-here" > .env
 
 Replace `your-api-key-here` with your actual OpenAI API key from https://platform.openai.com/api-keys
 
-### 5. Run the Application
+### 5. Start LM Studio (for AI Fix)
+
+1. Download and install LM Studio from https://lmstudio.ai/
+2. Download a model (e.g., liquid/lfm2-1.2b or any preferred model)
+3. Start the local server on port 1234
+
+### 6. Run the Application
+
+Both startup scripts will launch Voice Typing AND AI Fix together:
 
 #### API Mode (uses OpenAI API):
 ```bash
@@ -78,21 +102,38 @@ Replace `your-api-key-here` with your actual OpenAI API key from https://platfor
 # Or directly: python voice_ptt.py --local
 ```
 
+To run AI Fix standalone:
+```bash
+python ai-fix.py
+```
+
 ## 🎮 How to Use
 
+### Voice Typing (Alt+R)
 1. **Start the application** using one of the methods above
 2. **Select your microphone** from the device list (or press Enter for default)
 3. **Press `Alt+R`** to start recording (you'll see a red recording indicator)
 4. **Speak clearly** into your microphone
 5. **Press `Alt+R` again** to stop recording
 6. The transcribed text will be **automatically typed** at your cursor position
-7. **Press `ESC`** to exit the application
 
-### Recording Tips
-- The application uses push-to-talk, so hold the recording as long as needed
-- For best results, speak clearly and minimize background noise
-- The recording indicator shows when audio is being captured
-- Long recordings (>30 seconds) are automatically handled with chunking
+### AI Fix (Alt+G)
+1. **Highlight any text** you want to format or fix
+2. **Press `Alt+G`** to trigger AI formatting
+3. Watch the progress dots as AI processes your text
+4. The highlighted text will be **automatically replaced** with the formatted version
+
+### General
+- **Press `ESC`** to exit the application
+- Both features work simultaneously - use Alt+R for voice typing and Alt+G for text fixing
+
+### Usage Tips
+- **Voice Typing**: Push-to-talk design allows recordings of any length
+- **AI Fix**: Works great for fixing voice-typed text, emails, or any text needing polish
+- **Smart Formatting**: AI Fix understands context and formats appropriately:
+  - Emails get proper paragraph breaks
+  - Lists are formatted with line breaks
+  - Spoken URLs/emails are converted (e.g., "john at gmail dot com" → "john@gmail.com")
 
 ## 🛠️ Installation Guide
 
@@ -267,11 +308,10 @@ Add a global command to run voice typing from anywhere:
 ## ⚙️ Configuration
 
 ### Keyboard Shortcuts
-Edit `config.py` to change default shortcuts:
-```python
-RECORD_KEY_COMBO = "Alt+R"  # Change to your preference
-EXIT_KEY = "ESC"
-```
+Default shortcuts (can be modified in code):
+- `Alt+R` - Toggle voice recording
+- `Alt+G` - Format highlighted text with AI
+- `ESC` - Exit application
 
 ### Audio Settings
 ```python
@@ -284,6 +324,13 @@ DEFAULT_SAMPLE_RATE = 44100
 ```python
 LOCAL_WHISPER_MODEL = "distil-whisper/distil-large-v3"
 WHISPER_DEVICE = "cuda:0"  # or "cpu" or "mps" for Mac
+```
+
+### AI Fix Settings
+```python
+# In ai-fix.py
+api_url = "http://127.0.0.1:1234/v1/chat/completions"
+model = "liquid/lfm2-1.2b"  # Change to your preferred model
 ```
 
 ### Command Line Options
@@ -299,6 +346,7 @@ WHISPER_DEVICE = "cuda:0"  # or "cpu" or "mps" for Mac
 ```
 voice_typing/
 ├── voice_ptt.py           # Main application entry point
+├── ai-fix.py              # AI text formatting tool
 ├── config.py              # Configuration settings
 ├── audio_device.py        # Audio device management
 ├── audio_recorder.py      # Recording functionality
@@ -307,8 +355,8 @@ voice_typing/
 ├── keyboard_handler.py    # Hotkey management
 ├── recording_indicator.py # Visual indicator management
 ├── recording_indicator_qt.py # Qt-based indicator UI
-├── startVoice_api.sh      # API mode launcher
-├── startVoice_gpu.sh      # GPU mode launcher
+├── startVoice_api.sh      # API mode launcher (includes AI Fix)
+├── startVoice_gpu.sh      # GPU mode launcher (includes AI Fix)
 ├── fix_cuda_error.sh      # CUDA troubleshooting script
 ├── requirements.txt       # Python dependencies
 ├── .example.env           # Example environment configuration
@@ -318,11 +366,13 @@ voice_typing/
 
 ## 🔒 Privacy & Security
 
-- **API Mode**: Audio is sent to OpenAI for transcription
-- **GPU Mode**: All transcription happens locally on your machine
+- **Voice Typing API Mode**: Audio is sent to OpenAI for transcription
+- **Voice Typing GPU Mode**: All transcription happens locally on your machine
+- **AI Fix**: Text is sent to your local LM Studio instance only
 - Audio files are temporarily stored and immediately deleted after transcription
 - Your API key is stored locally in `.env` and never shared
-- No audio data is retained after transcription
+- No audio or text data is retained after processing
+- AI Fix preserves clipboard content during operation
 
 ## 📊 Performance
 
@@ -338,6 +388,12 @@ voice_typing/
 - Good accuracy with distil-whisper
 - Free after initial setup
 
+### AI Fix
+- Local processing via LM Studio
+- Real-time streaming responses
+- Depends on loaded model size/speed
+- No API costs
+
 ### System Requirements
 - **Minimum**: 4GB RAM, any modern CPU
 - **Recommended**: 8GB RAM, NVIDIA GPU with 4GB+ VRAM
@@ -348,6 +404,8 @@ voice_typing/
 1. **Experimental Chunking Warning**: Expected for long recordings, doesn't affect functionality
 2. **CUDA Initialization**: May fail after suspend/resume - use fix script
 3. **First GPU Run**: Takes time to download model (~1.5GB)
+4. **AI Fix Clipboard**: Some applications may interfere with clipboard operations
+5. **LM Studio Connection**: Ensure LM Studio server is running on port 1234
 
 ## 🤝 Contributing
 
@@ -374,6 +432,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - OpenAI Whisper for transcription technology
 - Hugging Face for distil-whisper models
+- LM Studio for local LLM hosting
 - The open-source community for various dependencies
 
 ## 📞 Support

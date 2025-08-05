@@ -4,9 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Push-to-Talk Voice Typing application that supports both OpenAI's Whisper API and local GPU-accelerated transcription using distil-whisper models.
+This is a Push-to-Talk Voice Typing and AI Text Formatting application that supports both OpenAI's Whisper API and local GPU-accelerated transcription using distil-whisper models.
 
-The application records audio when Alt+R is pressed and automatically types the transcribed text at the cursor position.
+The application provides two main features:
+1. **Voice Typing**: Records audio when Alt+R is pressed and automatically types the transcribed text at the cursor position
+2. **AI Fix**: Formats and corrects highlighted text when Alt+G is pressed using LM Studio's AI models
 
 ## Architecture
 
@@ -49,6 +51,14 @@ The application records audio when Alt+R is pressed and automatically types the 
    - Model configurations
    - Keyboard shortcuts
 
+9. **ai-fix.py** - AI-powered text formatting:
+   - Monitors for Alt+G hotkey
+   - Captures highlighted text via clipboard
+   - Sends text to LM Studio API for processing
+   - Replaces selection with formatted text
+   - Supports streaming responses
+   - Intelligent formatting with context understanding
+
 ### Dependencies & External Services
 
 - **Transcription Options**:
@@ -62,6 +72,12 @@ The application records audio when Alt+R is pressed and automatically types the 
      - Automatically detects CUDA GPU, Apple Silicon (MPS), or falls back to CPU
      - Requires PyTorch, transformers, and accelerate packages
      - No API key needed
+
+- **AI Text Formatting**:
+  - Requires LM Studio running on `http://127.0.0.1:1234`
+  - Uses LM Studio's OpenAI-compatible API endpoint
+  - Default model: liquid/lfm2-1.2b (configurable)
+  - Supports streaming responses for real-time feedback
   
 - **Audio Configuration**: 
   - Device selection menu at startup shows actual hardware names (e.g., AT2020, HyperX, Anker)
@@ -79,11 +95,13 @@ The application records audio when Alt+R is pressed and automatically types the 
 
 ### Running the Complete System
 
-There are two ways to run the voice typing system:
+The startup scripts now launch both Voice Typing and AI Fix features together.
+
+There are two ways to run the complete system:
 
 #### 1. OpenAI API Mode (requires API key)
 ```bash
-# Start with device selection menu
+# Start with device selection menu (launches both Voice Typing and AI Fix)
 ./startVoice_api.sh
 
 # Skip device selection and use system default
@@ -98,7 +116,7 @@ There are two ways to run the voice typing system:
 
 #### 2. Local GPU Mode (uses distil-whisper/distil-large-v3)
 ```bash
-# Start with device selection menu
+# Start with device selection menu (launches both Voice Typing and AI Fix)
 ./startVoice_gpu.sh
 
 # Skip device selection and use system default
@@ -110,6 +128,10 @@ There are two ways to run the voice typing system:
 # List available devices
 ./startVoice_gpu.sh --list-devices
 ```
+
+Both scripts will start:
+- Voice Typing (Alt+R) - For speech-to-text transcription
+- AI Fix (Alt+G) - For formatting and correcting highlighted text
 
 The GPU mode will:
 - Automatically detect CUDA GPU, Apple Silicon (MPS), or fall back to CPU
@@ -140,6 +162,9 @@ python voice_ptt.py --list-devices
 
 # The --api flag is accepted for backwards compatibility
 python voice_ptt.py --api
+
+# Run AI Fix standalone
+python ai-fix.py
 ```
 
 ### Virtual Environment
@@ -154,7 +179,7 @@ source whisper_venv/bin/activate
 # Install dependencies for API mode
 pip install -r requirements.txt
 # or manually:
-pip install sounddevice numpy scipy pynput pyperclip python-dotenv openai PyQt6
+pip install sounddevice numpy scipy pynput pyperclip python-dotenv openai PyQt6 requests
 
 # Additional dependencies for GPU mode
 pip install torch transformers accelerate
@@ -173,9 +198,15 @@ pip install torch transformers accelerate
 - **Transcription**: Transcriber class supports both API and local GPU transcription
 - **Text Input**: Uses `pyperclip` to copy text to clipboard and `pynput` to paste with Ctrl+Shift+V
 - **Line Break Handling**: Automatically removes newlines from transcriptions for continuous text
-- **Keyboard Detection**: Custom listener tracks Alt key state to detect Alt+R combination
+- **Keyboard Detection**: Custom listener tracks Alt key state to detect Alt+R and Alt+G combinations
 - **Error Handling**: Graceful handling of API errors and audio device issues with automatic fallback
 - **Sample Rate Detection**: Tests multiple rates (8000-96000 Hz) and selects best supported option
+- **AI Text Processing**: 
+  - Captures highlighted text preserving clipboard state
+  - Streams AI responses for real-time feedback
+  - Intelligent formatting with context understanding
+  - Converts spoken formats (e.g., "dot com" → ".com")
+  - Adds appropriate line breaks for emails, lists, and paragraphs
 
 ## Device Selection Workflow
 
@@ -205,14 +236,19 @@ The indicator is implemented in `recording_indicator_qt.py` and requires PyQt6 t
 
 - Audio device selection menu appears at startup showing actual device names (AT2020, HyperX, etc.)
 - Temporary audio files are cleaned up after transcription
-- `.env` file is gitignored and must contain `OPENAI_API_KEY`
+- `.env` file is gitignored and must contain `OPENAI_API_KEY` for API mode
+- AI Fix requires LM Studio running on `http://127.0.0.1:1234`
 - Command-line arguments:
   - `--api`: Accepted for backwards compatibility but not needed (API is default)
   - `--local`: Use local GPU model instead of OpenAI API
   - `--no-device-select`: Skip device selection menu and use system default
   - `--device <index>`: Use specific device by index number
   - `--list-devices`: List available devices and exit
-- Requirements.txt includes all dependencies including PyQt6 for the recording indicator
+- Keyboard shortcuts:
+  - `Alt+R`: Toggle voice recording and transcription
+  - `Alt+G`: Format and fix highlighted text with AI
+  - `ESC`: Exit the application
+- Requirements.txt includes all dependencies including PyQt6 for the recording indicator and requests for AI Fix
 - Recording indicator requires PyQt6 but the app will still work if PyQt6 is not installed
 - Uses sounddevice instead of PyAudio for better Linux compatibility
 - Uses PulseAudio to get actual hardware device names instead of generic ALSA names

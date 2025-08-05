@@ -19,6 +19,8 @@ fi
 cleanup() {
     echo ""
     echo "🛑 Shutting down..."
+    # Kill all background processes
+    kill $(jobs -p) 2>/dev/null
     echo "✅ Stopped"
     exit 0
 }
@@ -67,7 +69,19 @@ except Exception as e:
 "
 
 echo ""
-echo "🎤 Starting Voice Typing application..."
+
+# Start AI Fix in background
+echo "🤖 Starting AI Fix (Alt+G)..."
+python ai-fix.py &
+AI_FIX_PID=$!
+
+# Give AI Fix a moment to start
+sleep 1
+
+echo "🎤 Starting Voice Typing (Alt+R)..."
 
 # Pass all arguments to voice_ptt.py with --local flag
 python voice_ptt.py --local "$@"
+
+# Wait for all background processes
+wait
