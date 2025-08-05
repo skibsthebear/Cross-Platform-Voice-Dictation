@@ -121,7 +121,7 @@ class AIFormatter:
         user_message = (
             "You will always only reply with the formatted text. Your sole job is to format the text. "
             "Read the entire text carefully and understand the context before formatting. "
-            "Add appropriate line breaks to separate paragraphs, sections, or logical units of text only if needed. If not needed do not use unnecessary line breaks. "
+            "Add appropriate line breaks to separate paragraphs, only if needed. If not needed do not use unnecessary line breaks. "
             "Fix grammar, spelling, punctuation, and style issues. "
             "Convert spoken-out formats to their proper syntax (e.g., 'dot com' to '.com', 'readme dot md' to 'readme.md', "
             "'w w w dot' to 'www.', 'at symbol' to '@', 'hashtag' to '#'). "
