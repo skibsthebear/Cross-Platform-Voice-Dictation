@@ -1,276 +1,190 @@
 #!/usr/bin/env python3
 """
-Push-to-Talk Voice Typing with Whisper.cpp
+Push-to-Talk Voice Typing with OpenAI API
 Press Alt+R to start/stop recording
 Transcribed text is automatically typed at cursor position
 """
 
-import pyaudio
-import wave
-import requests
-import os
 import sys
+import argparse
 import threading
-import time
-import pyperclip
-from datetime import datetime
-from pynput import keyboard
-from pynput.keyboard import Key, Controller
+from config import RECORD_KEY_COMBO, EXIT_KEY
+from audio_device import list_and_select_device, list_all_devices, set_device
+from audio_recorder import AudioRecorder
+from transcription import Transcriber
+from text_input import TextTyper
+from keyboard_handler import KeyboardHandler
+from recording_indicator import RecordingIndicatorManager
 
-# Configuration
-WHISPER_SERVER = "http://localhost:50021/inference"
-OUTPUT_DIR = "outputs"
-SAMPLE_RATE = 44100  # AT2020USB-X native rate
-CHANNELS = 1
-CHUNK_SIZE = 1024
-DEVICE_INDEX = 4  # AT2020USB-X device
 
-# Global state
-is_recording = False
-recording_thread = None
-frames = []
-keyboard_controller = Controller()
-
-def record_audio():
-    """Record audio from AT2020USB-X microphone"""
-    global frames, is_recording
+class VoiceTypingApp:
+    def __init__(self, use_local=False):
+        self.recorder = AudioRecorder()
+        self.transcriber = Transcriber(use_local=use_local)
+        self.text_typer = TextTyper()
+        self.indicator = RecordingIndicatorManager()
+        self.keyboard_handler = KeyboardHandler(
+            on_record_toggle=self.toggle_recording,
+            on_exit=self.cleanup
+        )
+        self.recording_thread = None
+        self.use_local = use_local
+        
+    def toggle_recording(self):
+        """Toggle recording on/off"""
+        print(f"\n🎛️  Toggle recording called. Current state: is_recording={self.recorder.is_recording}")
+        
+        if not self.recorder.is_recording:
+            print("▶️  Starting recording...")
+            # Start recording in a separate thread
+            self.recording_thread = threading.Thread(target=self._record_and_transcribe)
+            self.recording_thread.start()
+            print(f"🧵 Recording thread started: {self.recording_thread.is_alive()}")
+            self.indicator.show()
+        else:
+            print("⏸️  Stopping recording...")
+            # Stop recording - signal the recording thread to stop
+            if self.recording_thread:
+                # Signal the recording to stop
+                self.recorder.should_stop = True
+                print("🛑 Signaled recording to stop")
+                print("⏳ Waiting for recording thread to finish...")
+                self.recording_thread.join(timeout=5)
+                if self.recording_thread.is_alive():
+                    print("⚠️  Recording thread still alive after timeout!")
+                else:
+                    print("✅ Recording thread finished")
+            self.indicator.hide()
     
-    p = pyaudio.PyAudio()
-    
-    print("🎤 Recording started...")
-    
-    # Open stream with AT2020USB-X
-    stream_params = {
-        'format': pyaudio.paInt16,
-        'channels': CHANNELS,
-        'rate': SAMPLE_RATE,
-        'input': True,
-        'frames_per_buffer': CHUNK_SIZE,
-        'input_device_index': DEVICE_INDEX
-    }
-    
-    try:
-        stream = p.open(**stream_params)
-    except Exception as e:
-        print(f"❌ Error opening audio stream: {e}")
-        is_recording = False
-        p.terminate()
-        return
-    
-    frames = []
-    
-    # Record while flag is set
-    while is_recording:
+    def _record_and_transcribe(self):
+        """Record audio and transcribe it"""
+        print("🎙️  _record_and_transcribe thread started")
         try:
-            data = stream.read(CHUNK_SIZE, exception_on_overflow=False)
-            frames.append(data)
-        except Exception as e:
-            print(f"❌ Error reading audio: {e}")
-            break
-    
-    # Stop and close stream
-    stream.stop_stream()
-    stream.close()
-    p.terminate()
-    
-    print("⏹️  Recording stopped")
-    
-    # Save and transcribe if we have audio
-    if frames:
-        save_and_transcribe()
-
-def save_and_transcribe():
-    """Save recorded audio and send to whisper server"""
-    global frames
-    
-    if not frames:
-        return
-    
-    # Create output directory if it doesn't exist
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    
-    # Generate filename with timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = os.path.join(OUTPUT_DIR, f"recording_{timestamp}.wav")
-    
-    # Save WAV file
-    p = pyaudio.PyAudio()
-    with wave.open(output_file, 'wb') as wf:
-        wf.setnchannels(CHANNELS)
-        wf.setsampwidth(p.get_sample_size(pyaudio.paInt16))
-        wf.setframerate(SAMPLE_RATE)
-        wf.writeframes(b''.join(frames))
-    p.terminate()
-    
-    file_size = os.path.getsize(output_file)
-    print(f"💾 Audio saved: {output_file} ({file_size:,} bytes)")
-    
-    # Send to whisper server
-    print("🔄 Transcribing...")
-    
-    try:
-        with open(output_file, 'rb') as f:
-            files = {'file': (os.path.basename(output_file), f, 'audio/wav')}
-            data = {
-                'temperature': '0.0',
-                'response-format': 'json'
-            }
+            # Start recording
+            print("📍 Starting recorder...")
+            self.recorder.start_recording()
             
-            response = requests.post(WHISPER_SERVER, files=files, data=data, timeout=30)
+            # Wait until recording is stopped
+            print("⏳ Waiting for recording to stop...")
+            wait_count = 0
+            while self.recorder.is_recording and not self.recorder.should_stop:
+                threading.Event().wait(0.1)
+                wait_count += 1
+                if wait_count % 10 == 0:  # Log every second
+                    print(f"   Still recording... ({wait_count/10:.1f}s)")
             
-            if response.status_code == 200:
-                result = response.json()
-                text = result.get('text', '').strip()
-                
-                # Remove line breaks and clean up spacing
-                text = text.replace('\n', ' ').replace('\r', ' ')
-                # Collapse multiple spaces into single space
-                text = ' '.join(text.split())
+            print("📍 Recording loop ended, stopping recorder...")
+            # Stop recording and get the audio file
+            audio_file = self.recorder.stop_recording()
+            
+            if audio_file:
+                print(f"📄 Audio file saved: {audio_file}")
+                # Transcribe the audio
+                print("🔤 Starting transcription...")
+                text = self.transcriber.transcribe_audio(audio_file)
                 
                 if text:
-                    print(f"📝 Transcription: {text}")
-                    type_text(text)
+                    # Type the transcribed text
+                    print(f"✍️  Typing text: {text[:50]}...")
+                    self.text_typer.type_text(text)
                 else:
                     print("⚠️  No text transcribed")
-            else:
-                print(f"❌ Server error: {response.status_code}")
                 
-    except requests.exceptions.ConnectionError:
-        print("❌ Could not connect to whisper server")
-        print(f"   Make sure server is running at {WHISPER_SERVER}")
-    except Exception as e:
-        print(f"❌ Error during transcription: {e}")
+                # Clean up the audio file
+                print("🗑️  Cleaning up audio file...")
+                self.recorder.cleanup_file(audio_file)
+            else:
+                print("❌ No audio file returned from recorder!")
+                
+        except Exception as e:
+            print(f"❌ Error during recording/transcription: {e}")
+            import traceback
+            traceback.print_exc()
+            self.recorder.is_recording = False
+        
+        print("🏁 _record_and_transcribe thread finished")
     
-    # Clean up audio file
-    try:
-        os.remove(output_file)
-    except:
-        pass
+    def cleanup(self):
+        """Clean up resources"""
+        if self.recorder.is_recording:
+            self.recorder.is_recording = False
+        self.indicator.hide()
+        
+    def run(self):
+        """Run the application"""
+        print()
+        if self.use_local:
+            print("🖥️  Using Local Whisper Model")
+        else:
+            print("📡 Using OpenAI Whisper API")
+        print()
+        print("🎮 Controls:")
+        print(f"  • {RECORD_KEY_COMBO}: Start/Stop recording")
+        print(f"  • {EXIT_KEY}: Exit")
+        print()
+        print("✨ Ready! Press Alt+R to start recording...")
+        print("-" * 60)
+        
+        # Start keyboard listener
+        self.keyboard_handler.start()
+        self.keyboard_handler.wait()
 
-def type_text(text):
-    """Copy text to clipboard and paste at current cursor position"""
-    if not text:
-        return
-    
-    print("📋 Copying to clipboard and pasting...")
-    
-    # Copy text to clipboard
-    pyperclip.copy(text)
-    
-    # Small delay to ensure window focus
-    time.sleep(0.1)
-    
-    # Paste using Ctrl+Shift+V (or Cmd+Shift+V on macOS)
-    keyboard_controller.press(Key.ctrl)
-    keyboard_controller.press(Key.shift)
-    keyboard_controller.press('v')
-    keyboard_controller.release('v')
-    keyboard_controller.release(Key.shift)
-    keyboard_controller.release(Key.ctrl)
-    
-    print("✅ Text pasted!")
-
-def toggle_recording():
-    """Toggle recording on/off"""
-    global is_recording, recording_thread
-    
-    if not is_recording:
-        # Start recording
-        is_recording = True
-        recording_thread = threading.Thread(target=record_audio)
-        recording_thread.start()
-    else:
-        # Stop recording
-        is_recording = False
-        if recording_thread:
-            recording_thread.join(timeout=2)
-
-def on_press(key):
-    """Handle key press events"""
-    try:
-        # Check for Alt+R combination
-        if hasattr(key, 'char') and key.char == 'r':
-            # Check if Alt is pressed
-            if keyboard.Controller().alt_pressed:
-                toggle_recording()
-                return
-    except AttributeError:
-        pass
-    
-    # Check for Escape to quit
-    if key == Key.esc:
-        print("\n👋 Exiting...")
-        global is_recording
-        if is_recording:
-            is_recording = False
-        return False
 
 def main():
     """Main function"""
-    print("=" * 60)
-    print("🎙️  Push-to-Talk Voice Typing")
-    print("=" * 60)
-    print()
-    print("📌 Using: AT2020USB-X microphone (Device 4)")
-    print(f"📡 Whisper server: {WHISPER_SERVER}")
-    print()
-    print("🎮 Controls:")
-    print("  • Alt+R: Start/Stop recording")
-    print("  • ESC: Exit")
-    print()
-    print("✨ Ready! Press Alt+R to start recording...")
-    print("-" * 60)
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Push-to-Talk Voice Typing')
+    parser.add_argument('--api', action='store_true', 
+                        help='Use OpenAI API for transcription (included for backwards compatibility)')
+    parser.add_argument('--local', action='store_true',
+                        help='Use local Whisper model instead of OpenAI API')
+    parser.add_argument('--list-devices', action='store_true', 
+                        help='List available audio devices and exit')
+    parser.add_argument('--device', type=int, 
+                        help='Use specific audio device by index')
+    parser.add_argument('--no-device-select', action='store_true', 
+                        help='Skip device selection and use system default')
+    args = parser.parse_args()
     
-    # Check if whisper server is running
+    # List devices if requested
+    if args.list_devices:
+        list_all_devices()
+        sys.exit(0)
+    
+    # Set default device if specified
+    if args.device is not None:
+        if not set_device(args.device):
+            sys.exit(1)
+    elif not args.no_device_select:
+        # Show device selection menu unless skipped
+        print("=" * 60)
+        print("🎙️  Push-to-Talk Voice Typing")
+        print("=" * 60)
+        list_and_select_device()
+    
+    if args.no_device_select or args.device is not None:
+        # Only show header if we didn't show device selection
+        print("=" * 60)
+        print("🎙️  Push-to-Talk Voice Typing")
+        print("=" * 60)
+    
+    # Create and run the application
     try:
-        response = requests.get(WHISPER_SERVER.replace('/inference', '/health'), timeout=2)
-    except:
-        print("⚠️  Warning: Cannot reach whisper server")
-        print(f"   Make sure it's running at {WHISPER_SERVER}")
-        print()
-    
-    # Create a custom listener that tracks Alt key state
-    class CustomListener(keyboard.Listener):
-        def __init__(self):
-            super().__init__(on_press=self.on_press, on_release=self.on_release)
-            self.alt_pressed = False
-            
-        def on_press(self, key):
-            if key in [Key.alt, Key.alt_l, Key.alt_r]:
-                self.alt_pressed = True
-            
-            # Check for Alt+R
-            if self.alt_pressed:
-                try:
-                    if hasattr(key, 'char') and key.char == 'r':
-                        toggle_recording()
-                except:
-                    pass
-            
-            # Check for Escape
-            if key == Key.esc:
-                print("\n👋 Exiting...")
-                global is_recording
-                if is_recording:
-                    is_recording = False
-                return False
-        
-        def on_release(self, key):
-            if key in [Key.alt, Key.alt_l, Key.alt_r]:
-                self.alt_pressed = False
-    
-    # Start keyboard listener
-    with CustomListener() as listener:
-        listener.join()
-
-if __name__ == "__main__":
-    try:
-        main()
+        app = VoiceTypingApp(use_local=args.local)
+        app.run()
+    except ValueError as e:
+        print(f"❌ Error: {e}")
+        if not args.local:
+            print("   Please edit .env and add your OpenAI API key")
+        sys.exit(1)
     except KeyboardInterrupt:
         print("\n\n👋 Interrupted by user")
-        if is_recording:
-            is_recording = False
+        app.cleanup()
     except Exception as e:
         print(f"\n❌ Error: {e}")
-        if is_recording:
-            is_recording = False
+        if 'app' in locals():
+            app.cleanup()
+
+
+if __name__ == "__main__":
+    main()

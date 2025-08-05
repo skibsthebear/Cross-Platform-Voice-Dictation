@@ -29,6 +29,9 @@ venv/
 ENV/
 env/
 
+# Environment variables
+.env
+
 # Submodules/External projects
 whisper.cpp/
 ydotool/
@@ -48,3 +51,7 @@ Thumbs.db
 outputs/
 *.wav
 *.mp3
+
+# Rust build artifacts
+recording-indicator/target/
+recording-indicator/Cargo.lock
