@@ -57,12 +57,8 @@ class KeyboardHandler:
             except:
                 pass
         
-        # Check for Escape
-        if key == Key.esc:
-            print("\n👋 Exiting AI Fix...")
-            if self.on_exit:
-                self.on_exit()
-            return False  # Stop listener
+        # Removed ESC key exit to prevent accidental shutdowns
+        # AI Fix will only exit when the main voice typing app exits
     
     def _on_release(self, key):
         """Handle key release events"""
@@ -114,7 +110,7 @@ class TextCapture:
 class AIFormatter:
     """Handles communication with LM Studio API"""
     
-    def __init__(self, api_url="http://127.0.0.1:1234/v1/chat/completions", model="liquid/lfm2-1.2b"):
+    def __init__(self, api_url="http://127.0.0.1:1234/v1/chat/completions", model="google/gemma-3n-e4b"):
         self.api_url = api_url
         self.model = model
         self.headers = {"Content-Type": "application/json"}
@@ -125,7 +121,7 @@ class AIFormatter:
         user_message = (
             "You will always only reply with the formatted text. Your sole job is to format the text. "
             "Read the entire text carefully and understand the context before formatting. "
-            "Add appropriate line breaks to separate paragraphs, sections, or logical units of text. "
+            "Add appropriate line breaks to separate paragraphs, sections, or logical units of text only if needed. If not needed do not use unnecessary line breaks. "
             "Fix grammar, spelling, punctuation, and style issues. "
             "Convert spoken-out formats to their proper syntax (e.g., 'dot com' to '.com', 'readme dot md' to 'readme.md', "
             "'w w w dot' to 'www.', 'at symbol' to '@', 'hashtag' to '#'). "
@@ -266,13 +262,13 @@ class AIFix:
     def exit_app(self):
         """Clean exit"""
         self.keyboard_handler.stop()
-        sys.exit(0)
+        # Don't use sys.exit() as it causes the parent script to exit
+        # Just return gracefully instead
         
     def run(self):
         """Start the application"""
         print("🚀 AI Fix is running!")
         print("📌 Press Alt+G to fix highlighted text")
-        print("📌 Press ESC to exit")
         print("\n💡 Make sure LM Studio is running on http://127.0.0.1:1234")
         
         # Start keyboard listener
@@ -289,7 +285,12 @@ class AIFix:
 def main():
     """Main entry point"""
     app = AIFix()
-    app.run()
+    try:
+        app.run()
+    except Exception as e:
+        print(f"❌ AI Fix error: {e}")
+    finally:
+        print("👋 AI Fix stopped")
 
 
 if __name__ == "__main__":

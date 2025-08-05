@@ -38,9 +38,18 @@ trap cleanup SIGINT SIGTERM EXIT
 # Activate virtual environment
 source ./whisper_venv/bin/activate
 
+# Start AI Fix in background with restart capability
+start_ai_fix() {
+    while true; do
+        echo "🤖 Starting AI Fix (Alt+G)..."
+        python ai-fix.py
+        echo "⚠️  AI Fix exited. Restarting in 2 seconds..."
+        sleep 2
+    done
+}
+
 # Start AI Fix in background
-echo "🤖 Starting AI Fix (Alt+G)..."
-python ai-fix.py &
+start_ai_fix &
 AI_FIX_PID=$!
 
 # Give AI Fix a moment to start
@@ -52,5 +61,5 @@ echo "🎤 Starting Voice Typing (Alt+R)..."
 # Pass all arguments to voice_ptt.py (API mode is default)
 python voice_ptt.py "$@"
 
-# Wait for all background processes
-wait
+# When voice_ptt.py exits, we should clean up
+echo "Voice typing exited. Cleaning up..."
