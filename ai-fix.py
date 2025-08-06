@@ -197,19 +197,34 @@ class TextReplacer:
         if not new_text:
             return
         
-        # Copy new text to clipboard
-        pyperclip.copy(new_text)
+        # Save current clipboard content
+        original_clipboard = pyperclip.paste()
         
-        # Small delay to ensure focus
-        time.sleep(0.1)
-        
-        # Paste to replace selection (Ctrl+V)
-        self.keyboard.press(Key.ctrl)
-        self.keyboard.press('v')
-        self.keyboard.release('v')
-        self.keyboard.release(Key.ctrl)
-        
-        print("✅ Text replaced!")
+        try:
+            # Copy new text to clipboard
+            pyperclip.copy(new_text)
+            
+            # Small delay to ensure focus
+            time.sleep(0.1)
+            
+            # Paste to replace selection (Ctrl+V)
+            self.keyboard.press(Key.ctrl)
+            self.keyboard.press('v')
+            self.keyboard.release('v')
+            self.keyboard.release(Key.ctrl)
+            
+            # Small delay to ensure replacement completes
+            time.sleep(0.1)
+            
+            # Restore original clipboard content
+            pyperclip.copy(original_clipboard)
+            
+            print("✅ Text replaced and clipboard restored!")
+            
+        except Exception as e:
+            print(f"❌ Error during text replacement: {e}")
+            # Restore original clipboard on error
+            pyperclip.copy(original_clipboard)
 
 
 class AIFix:

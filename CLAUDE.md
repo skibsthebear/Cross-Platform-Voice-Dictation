@@ -197,6 +197,7 @@ pip install torch transformers accelerate
 - **Audio Storage**: Temporarily saves WAV files in `outputs/` directory before transcription
 - **Transcription**: Transcriber class supports both API and local GPU transcription
 - **Text Input**: Uses `pyperclip` to copy text to clipboard and `pynput` to paste with Ctrl+Shift+V
+  - **Clipboard Restoration**: Automatically restores previous clipboard content after pasting transcribed text
 - **Line Break Handling**: Automatically removes newlines from transcriptions for continuous text
 - **Keyboard Detection**: Custom listener tracks Alt key state to detect Alt+R and Alt+G combinations
 - **Error Handling**: Graceful handling of API errors and audio device issues with automatic fallback
@@ -207,6 +208,7 @@ pip install torch transformers accelerate
   - Intelligent formatting with context understanding
   - Converts spoken formats (e.g., "dot com" → ".com")
   - Adds appropriate line breaks for emails, lists, and paragraphs
+  - **Clipboard Restoration**: Automatically restores previous clipboard content after text replacement
 
 ## Device Selection Workflow
 
