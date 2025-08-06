@@ -22,7 +22,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-
+CLAUDE.md
 # Virtual Environment
 whisper_venv/
 venv/

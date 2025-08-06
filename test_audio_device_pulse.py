@@ -13,7 +13,11 @@ import sys
 import json
 
 def get_pulseaudio_sources():
-    """Get list of audio sources from PulseAudio"""
+    """Get audio sources from PulseAudio (Linux only)."""
+    if sys.platform == "win32":
+        print("PulseAudio is not available on Windows.")
+        return []
+    
     try:
         # Get list of sources (input devices) from pactl
         result = subprocess.run(
@@ -69,6 +73,11 @@ def list_devices_with_pulse():
     
     # Get PulseAudio sources
     pulse_sources = get_pulseaudio_sources()
+    
+    # Add Windows compatibility check
+    if not pulse_sources and sys.platform == "win32":
+        print("Using sounddevice for Windows...")
+        # Use sounddevice enumeration instead
     
     if pulse_sources:
         print("Using PulseAudio device information:\n")

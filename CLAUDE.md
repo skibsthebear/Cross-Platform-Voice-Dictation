@@ -249,6 +249,19 @@ The indicator is implemented in `recording_indicator_qt.py` and requires PyQt6 t
   - `Alt+G`: Format and fix highlighted text with AI
   - `ESC`: Exit the application
 - Requirements.txt includes all dependencies including PyQt6 for the recording indicator and requests for AI Fix
+
+## Windows Compatibility
+
+The application supports Windows with the following considerations:
+
+- **Audio Device Management**: Uses sounddevice library instead of PulseAudio
+- **Batch Scripts**: Windows .bat equivalents are provided for all .sh scripts
+- **Virtual Environment**: Uses `whisper_venv\Scripts\activate.bat` instead of `source`
+- **CUDA Paths**: Automatically detects Windows CUDA installation
+- **Keyboard Shortcuts**: Same shortcuts work on Windows (Alt+R, Alt+G, ESC)
+- **Clipboard Handling**: Uses Ctrl+V on Windows instead of Ctrl+Shift+V
+
+See WINDOWS_SETUP.md for detailed Windows installation instructions.
 - Recording indicator requires PyQt6 but the app will still work if PyQt6 is not installed
 - Uses sounddevice instead of PyAudio for better Linux compatibility
 - Uses PulseAudio to get actual hardware device names instead of generic ALSA names

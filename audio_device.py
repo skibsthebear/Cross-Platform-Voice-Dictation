@@ -10,6 +10,7 @@ import sounddevice as sd
 from config import CHANNELS, DTYPE, PREFERRED_SAMPLE_RATES
 
 
+# Linux-only PulseAudio implementation
 def get_pulseaudio_sources():
     """Get list of audio sources from PulseAudio"""
     try:
@@ -58,6 +59,21 @@ def get_pulseaudio_sources():
         return None
 
 
+def get_windows_device_names():
+    """Get Windows audio device names using sounddevice."""
+    import sounddevice as sd
+    devices = []
+    for i, device in enumerate(sd.query_devices()):
+        if device['max_input_channels'] > 0:
+            devices.append({
+                'index': i,
+                'name': device['name'],
+                'channels': device['max_input_channels'],
+                'sample_rate': device['default_samplerate']
+            })
+    return devices
+
+
 def list_and_select_device():
     """List devices and let user select one"""
     print("\n📋 Available Input Devices:")
@@ -66,7 +82,7 @@ def list_and_select_device():
     # Get PulseAudio sources
     pulse_sources = get_pulseaudio_sources()
     
-    if pulse_sources:
+    if pulse_sources and sys.platform != "win32":
         devices = []
         for i, source in enumerate(pulse_sources, 1):
             devices.append(source)
@@ -89,15 +105,22 @@ def list_and_select_device():
                 if 1 <= choice <= len(devices):
                     selected = devices[choice - 1]
                     print(f"\n✅ Selected: {selected['product_name']}")
+                    
+                    # Add Windows platform check
+                    if sys.platform == "win32":
+                        print(f"Selected Windows audio device: {selected['product_name']}")
+                        return choice - 1  # Return device index for Windows
+                    
                     # Set this as the recording source in PulseAudio
-                    try:
-                        subprocess.run([
-                            'pactl', 'set-default-source', 
-                            selected['name']
-                        ], check=True, capture_output=True)
-                        print("   Set as default PulseAudio source")
-                    except:
-                        print("   ⚠️  Could not set as default source")
+                    # Windows doesn't use PulseAudio - commenting out
+                    # try:
+                    #     subprocess.run([
+                    #         'pactl', 'set-default-source', 
+                    #         selected['name']
+                    #     ], check=True, capture_output=True)
+                    #     print("   Set as default PulseAudio source")
+                    # except:
+                    #     print("   ⚠️  Could not set as default source")
                     return selected
                 else:
                     print("❌ Invalid choice. Please try again.")
@@ -109,7 +132,7 @@ def list_and_select_device():
                 sys.exit(0)
     else:
         # Fallback to sounddevice listing
-        print("Using sounddevice listing:\n")
+        print("Using sounddevice for audio device selection...\n")
         devices = sd.query_devices()
         input_devices = []
         
