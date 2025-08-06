@@ -5,6 +5,7 @@ Keyboard handler module for managing hotkeys
 
 from pynput import keyboard
 from pynput.keyboard import Key
+import time
 
 
 class KeyboardHandler:
@@ -13,6 +14,9 @@ class KeyboardHandler:
         self.on_exit = on_exit
         self.alt_pressed = False
         self.listener = None
+        self.first_esc_time = None
+        self.exit_confirmation_active = False
+        self.exit_confirmation_timeout = 2.0  # 2 seconds
         
     def start(self):
         """Start listening for keyboard events"""
@@ -47,15 +51,37 @@ class KeyboardHandler:
             except:
                 pass
         
-        # Check for Escape
+        # Check for Escape - double-press confirmation
         if key == Key.esc:
-            print("\n👋 Exiting...")
-            if self.on_exit:
-                self.on_exit()
-            return False  # Stop listener
+            current_time = time.time()
+            
+            if not self.exit_confirmation_active:
+                # First ESC press - start confirmation countdown
+                self.first_esc_time = current_time
+                self.exit_confirmation_active = True
+                print("\n⚠️  Press ESC again within 2 seconds to exit")
+            else:
+                # Check if second ESC press is within timeout window
+                if current_time - self.first_esc_time <= self.exit_confirmation_timeout:
+                    # Second ESC press within timeout - exit
+                    print("\n👋 Exiting...")
+                    if self.on_exit:
+                        self.on_exit()
+                    return False  # Stop listener
+                else:
+                    # Second ESC press too late - restart confirmation
+                    self.first_esc_time = current_time
+                    print("\n⚠️  Press ESC again within 2 seconds to exit")
     
     def _on_release(self, key):
         """Handle key release events"""
         # Track Alt key state
         if key in [Key.alt, Key.alt_l, Key.alt_r]:
             self.alt_pressed = False
+        
+        # Reset exit confirmation if timeout has passed
+        if self.exit_confirmation_active and self.first_esc_time:
+            current_time = time.time()
+            if current_time - self.first_esc_time > self.exit_confirmation_timeout:
+                self.exit_confirmation_active = False
+                self.first_esc_time = None

@@ -1,209 +1,209 @@
-# Task: Fix AI Fix Double-Pasting Issue
+# Investigation: System Shutdown Issues
 
-## Problem Analysis
+## Executive Summary
 
-The AI Fix feature is pasting text twice when Alt+G is pressed. Based on the user's output, we can see these messages appearing twice:
-```
-🔧 AI Fix triggered!
-📋 Capturing highlighted text...
-📝 Captured 54 characters
-🤖 Sending to AI for processing...
-📝 Captured 54 characters
-🤖 Sending to AI for processing...
-..............
-.......✅ Text replaced and clipboard restored!
-.......
-✅ Text replaced and clipboard restored!
-```
+After thorough investigation of the codebase, I've identified multiple potential causes for the unexpected system shutdowns. The issue appears to be a combination of keyboard handling conflicts, process management issues, and exit signal propagation between different components.
 
-This indicates that the `handle_fix()` method is being executed twice for a single Alt+G keypress.
+## Root Causes Identified
 
-## Root Cause Investigation
+### 1. **ESC Key Triggers Immediate Shutdown** (PRIMARY ISSUE)
 
-After examining the code in `ai-fix.py`, the likely causes are:
+**Location**: `keyboard_handler.py:50-55`
 
-### 1. **Keyboard Event Handling Issue** (Most Likely)
-- **Problem**: The keyboard listener might be detecting both `Alt+G` key press events twice
-- **Location**: `ai-fix.py:45-58` in the `_on_press()` method
-- **Cause**: The keyboard listener could be receiving duplicate events from the system
+The ESC key is configured to immediately exit the entire application:
 
-### 2. **Race Condition in Processing Lock** (Possible)  
-- **Problem**: The `processing` flag might not be preventing concurrent execution properly
-- **Location**: `ai-fix.py:241` and `ai-fix.py:245-248`
-- **Cause**: Timing issue where the flag isn't set fast enough before second trigger
-
-### 3. **Startup Script Launching Multiple Instances** (Less Likely)
-- **Problem**: The startup script might be launching AI Fix multiple times
-- **Location**: `startVoice_api.sh:41-53`
-- **Cause**: The restart loop could cause overlapping instances
-
-## Implementation Plan for Non-Programmers
-
-### **What We Need to Fix**
-
-The AI Fix program is responding to the Alt+G keypress twice instead of once, causing it to paste the formatted text two times. This makes the text appear duplicated in your document.
-
-### **Solution Overview**
-
-We need to add better protection so that when Alt+G is pressed, the program only processes it once, even if the system sends the keypress signal multiple times.
-
-### **Files to Modify**
-
-1. **`ai-fix.py`** - The main AI Fix program file
-2. **Test the fix** - Verify it works correctly
-
-### **Step-by-Step Fix Instructions**
-
-#### **Step 1: Improve Keyboard Event Handling**
-
-**What to change**: Add better duplicate event prevention in the keyboard handling code.
-
-**Location**: In `ai-fix.py`, find the `_on_press` method around line 45.
-
-**Current problematic code**:
 ```python
-def _on_press(self, key):
-    """Handle key press events"""
-    # Track Alt key state
-    if key in [Key.alt, Key.alt_l, Key.alt_r]:
-        self.alt_pressed = True
-    
-    # Check for Alt+G
-    if self.alt_pressed:
-        try:
-            if hasattr(key, 'char') and key.char == 'g':
-                if self.on_fix_trigger:
-                    self.on_fix_trigger()
-        except:
-            pass
+# Check for Escape
+if key == Key.esc:
+    print("\n=K Exiting...")
+    if self.on_exit:
+        self.on_exit()
+    return False  # Stop listener
 ```
 
-**What's wrong**: This code doesn't prevent multiple rapid keypresses of 'g' while Alt is held down.
+**Problem**: 
+- Pressing ESC at ANY time will immediately terminate the voice typing application
+- This is likely being pressed accidentally during normal use
+- The exit is immediate with no confirmation or grace period
+- When the main app exits, the startup script's cleanup function triggers, killing all processes
 
-**New improved code**:
+### 2. **Device Selection Exit Points**
+
+**Location**: `audio_device.py:109-110, 147-148`
+
+During device selection, Ctrl+C or invalid inputs trigger `sys.exit(0)`:
+
 ```python
-def _on_press(self, key):
-    """Handle key press events"""
-    # Track Alt key state
-    if key in [Key.alt, Key.alt_l, Key.alt_r]:
-        self.alt_pressed = True
-    
-    # Check for Alt+G
-    if self.alt_pressed:
-        try:
-            if hasattr(key, 'char') and key.char == 'g':
-                # Prevent rapid duplicate triggers
-                current_time = time.time()
-                if hasattr(self, 'last_trigger_time'):
-                    if current_time - self.last_trigger_time < 0.5:  # 500ms cooldown
-                        return
-                
-                self.last_trigger_time = current_time
-                if self.on_fix_trigger:
-                    self.on_fix_trigger()
-        except:
-            pass
+except KeyboardInterrupt:
+    print("\n\n=K Cancelled by user.")
+    sys.exit(0)
 ```
 
-**What this fixes**: Adds a 500-millisecond cooldown period so Alt+G can only trigger once every half second, preventing duplicate processing.
+**Problem**:
+- During startup, any keyboard interrupt exits the entire application
+- No way to recover from accidental Ctrl+C during device selection
 
-#### **Step 2: Improve Processing Lock**
+### 3. **AI Fix Restart Loop Can Cause Main App Exit**
 
-**What to change**: Make the processing lock more robust to prevent race conditions.
+**Location**: `startVoice_gpu.sh:78-85`
 
-**Location**: In `ai-fix.py`, find the `handle_fix` method around line 243.
+The AI Fix restart loop might be interfering with the main application:
 
-**Current code**:
+```bash
+start_ai_fix() {
+    while true; do
+        echo "> Starting AI Fix (Alt+G)..."
+        python ai-fix.py
+        echo "�  AI Fix exited. Restarting in 2 seconds..."
+        sleep 2
+    done
+}
+```
+
+**Problem**:
+- If AI Fix fails to acquire lock (from our recent fix), it exits with `sys.exit(1)`
+- The restart loop immediately tries again, potentially causing resource conflicts
+- Multiple restart attempts could trigger the parent script's error handling
+
+### 4. **Trap Handler Cascading Exits**
+
+**Location**: `startVoice_gpu.sh:33` and `startVoice_api.sh:40`
+
+```bash
+trap cleanup SIGINT SIGTERM EXIT
+```
+
+**Problem**:
+- The trap catches ALL exits, including normal ones
+- When voice_ptt.py exits for ANY reason, the cleanup function runs
+- Cleanup function kills ALL background processes including AI Fix
+- This makes it impossible to restart just one component
+
+### 5. **Recording Thread Management Issues**
+
+**Location**: `voice_ptt.py:41-58`
+
+The recording thread management has potential race conditions:
+
 ```python
-def handle_fix(self):
-    """Handle the Alt+G trigger"""
-    if self.processing:
-        print("⏳ Already processing, please wait...")
-        return
-        
-    self.processing = True
-    print("\n🔧 AI Fix triggered!")
+self.recording_thread = threading.Thread(target=self._record_and_transcribe)
+self.recording_thread.start()
+# ...
+self.recording_thread.join(timeout=5)
+if self.recording_thread.is_alive():
+    print("�  Recording thread still alive after timeout!")
 ```
 
-**New improved code**:
-```python
-def handle_fix(self):
-    """Handle the Alt+G trigger"""
-    # Use atomic check-and-set to prevent race conditions
-    if getattr(self, 'processing', False):
-        print("⏳ Already processing, please wait...")
-        return
-        
-    # Set processing flag immediately
-    self.processing = True
-    
-    # Add visual feedback that we're starting
-    print(f"\n🔧 AI Fix triggered at {time.strftime('%H:%M:%S')}!")
+**Problem**:
+- If the recording thread doesn't finish within 5 seconds, it's abandoned
+- Abandoned threads can cause resource conflicts
+- No cleanup for threads that timeout
+
+## Specific Shutdown Scenarios
+
+### Scenario 1: Accidental ESC Press
+1. User presses ESC key (accidentally or intentionally)
+2. `keyboard_handler.py` immediately triggers `on_exit()` callback
+3. `voice_ptt.py` cleanup() is called
+4. Main application exits
+5. Startup script's trap handler activates
+6. All processes are killed
+
+### Scenario 2: Recording Completion Triggers Exit
+From your log output:
+```
+ Recording thread finished
+�  Recording indicator stopped
+=K Exiting...
+Voice typing exited. Cleaning up...
 ```
 
-**What this fixes**: Makes sure the processing flag is set immediately and adds a timestamp so you can see if multiple triggers are happening.
+This suggests the application is exiting immediately after a successful recording, which shouldn't happen. The likely cause:
+- After transcription completes, something is triggering the exit condition
+- Possibly a keyboard event is being misinterpreted
+- Or the thread completion is somehow signaling an exit
 
-#### **Step 3: Add Required Import**
+### Scenario 3: AI Fix Lock Conflict
+1. AI Fix tries to start but finds existing lock
+2. Returns `sys.exit(1)`
+3. Restart loop immediately tries again
+4. Multiple failures might trigger parent script error handling
 
-**What to change**: Add the `time` import at the top of the file if it's not already there.
+## Critical Code Issues
 
-**Location**: At the top of `ai-fix.py`, around line 8.
+### Issue 1: No Exit Confirmation
+The ESC key immediately exits without any confirmation or delay. This is too easy to trigger accidentally.
 
-**Make sure this line exists**:
-```python
-import time
-```
+### Issue 2: Thread Lifecycle Management
+Recording threads can be abandoned if they take too long, leading to resource leaks.
 
-### **How to Test the Fix**
+### Issue 3: Process Restart Logic
+The AI Fix restart loop doesn't check why the process exited before restarting.
 
-1. **Start the program**: Run your normal startup script (`./startVoice_api.sh` or similar)
-2. **Select some text**: Highlight any text in a document
-3. **Press Alt+G once**: Hold Alt, press G, release both keys
-4. **Watch the output**: You should only see the processing messages once:
-   ```
-   🔧 AI Fix triggered at 14:30:25!
-   📋 Capturing highlighted text...
-   📝 Captured X characters
-   🤖 Sending to AI for processing...
-   ............
-   ✅ Text replaced and clipboard restored!
-   ```
-5. **Check your document**: The formatted text should appear only once, not twice
+### Issue 4: Exit Signal Propagation
+Exit signals cascade through all components, making targeted restarts impossible.
 
-### **Expected Results After Fix**
+## Recommendations
 
-- **Single Processing**: Alt+G will only trigger the formatting once per keypress
-- **Visual Confirmation**: Timestamps in the output will show only one trigger time
-- **No Duplicate Text**: Your formatted text will appear once in your document
-- **Cooldown Protection**: Rapid Alt+G presses won't cause issues
+### Immediate Fixes Needed
 
-### **If the Fix Doesn't Work**
+1. **Disable or Modify ESC Key Exit**
+   - Remove ESC key as exit trigger
+   - Or require double-press/confirmation
+   - Or add a timeout (ESC must be held for 2 seconds)
 
-If you still see double processing after this fix, it might be caused by:
+2. **Fix Recording Thread Completion**
+   - Investigate why app exits after successful recording
+   - Check if keyboard state is being misread after Alt+R release
 
-1. **Multiple AI Fix Processes**: Check if multiple instances are running with `ps aux | grep ai-fix`
-2. **System Keyboard Issues**: Try restarting your computer 
-3. **Startup Script Issue**: The startup script might be launching AI Fix twice
+3. **Improve AI Fix Restart Logic**
+   - Check exit code before restarting
+   - Add exponential backoff for restart attempts
+   - Don't restart if lock acquisition fails
 
-### **Backup Plan**
+4. **Better Process Management**
+   - Use process groups for better control
+   - Implement graceful shutdown sequences
+   - Allow individual component restarts
 
-If the keyboard cooldown approach doesn't work, we can try a different solution:
+### Long-term Improvements
 
-1. **Add Process ID Logging**: Make each AI Fix instance log its process ID
-2. **Check for Multiple Instances**: Detect and prevent multiple AI Fix processes
-3. **Alternative Keyboard Library**: Switch to a different keyboard monitoring approach
+1. **Implement State Machine**
+   - Clear states: IDLE, RECORDING, PROCESSING, ERROR
+   - State transitions should be explicit
+   - Exit should only be possible from IDLE state
 
-### **Files Modified Summary**
+2. **Add Logging System**
+   - Log all state changes
+   - Log all keyboard events
+   - Log all exit triggers with stack traces
 
-- **`ai-fix.py`**: Added keyboard event cooldown and improved processing lock
-- **No other files need changes**: This is a focused fix for the specific double-trigger issue
+3. **Separate Control Interface**
+   - Move exit control to a different key combination
+   - Add status display showing current state
+   - Implement command interface for debugging
 
-### **Success Criteria**
+## Most Likely Culprit
 
-✅ **Single Trigger**: Alt+G triggers formatting exactly once per keypress  
-✅ **No Duplicate Output**: Console shows processing messages only once  
-✅ **No Duplicate Text**: Formatted text appears once in documents  
-✅ **Responsive**: Fix doesn't slow down or interfere with normal operation  
-✅ **Reliable**: Works consistently across multiple uses  
+Based on the evidence, the **ESC key handler** is the most likely cause of unexpected shutdowns. Users are probably pressing ESC accidentally during normal use, which immediately terminates the entire application stack.
 
-This fix addresses the most common cause of duplicate processing while maintaining all the existing functionality of the AI Fix feature.
+The second most likely issue is something in the recording completion flow that's triggering an exit condition instead of returning to idle state.
+
+## Testing Recommendations
+
+1. **Disable ESC key exit** temporarily and see if shutdowns stop
+2. **Add verbose logging** around all exit points
+3. **Monitor keyboard events** to see what keys are pressed before shutdown
+4. **Test recording multiple times** in succession to identify patterns
+5. **Check system logs** for any OS-level signals or errors
+
+## Conclusion
+
+The system is too eager to shut down due to multiple hair-trigger exit conditions. The primary issue is likely the ESC key handler, but there are also structural issues with how processes are managed and restarted. A comprehensive fix would involve:
+
+1. Making exit conditions more deliberate (not accidental)
+2. Improving process lifecycle management
+3. Adding proper state management
+4. Implementing better error recovery
+
+The immediate priority should be disabling or modifying the ESC key exit handler and investigating why the application exits after successful recording completion.

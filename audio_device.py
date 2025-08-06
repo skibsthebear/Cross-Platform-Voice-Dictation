@@ -11,6 +11,17 @@ from config import CHANNELS, DTYPE, PREFERRED_SAMPLE_RATES
 from platform_detection import should_skip_device_selection, detect_operating_system
 
 
+class DeviceSelectionCancelled(Exception):
+    """Exception raised when device selection is cancelled by user
+    
+    This exception is raised instead of calling sys.exit() to allow the
+    calling application to decide how to handle the cancellation gracefully.
+    The application can continue with system default device or take other
+    appropriate action.
+    """
+    pass
+
+
 def get_pulseaudio_sources():
     """Get list of audio sources from PulseAudio"""
     try:
@@ -106,8 +117,13 @@ def list_and_select_device_linux():
             except ValueError:
                 print("❌ Please enter a valid number.")
             except KeyboardInterrupt:
-                print("\n\n👋 Cancelled by user.")
-                sys.exit(0)
+                print("\n\n👋 Device selection cancelled by user.")
+                print("   Continuing with system default device...")
+                raise DeviceSelectionCancelled("User cancelled device selection")
+            except EOFError:
+                # Handle case where input is closed (e.g., piped input)
+                print("\n\n👋 Input stream closed, using system default device.")
+                raise DeviceSelectionCancelled("Input stream closed during device selection")
     else:
         # Fallback to sounddevice listing
         print("Using sounddevice listing:\n")
@@ -144,8 +160,13 @@ def list_and_select_device_linux():
             except ValueError:
                 print("❌ Please enter a valid number.")
             except KeyboardInterrupt:
-                print("\n\n👋 Cancelled by user.")
-                sys.exit(0)
+                print("\n\n👋 Device selection cancelled by user.")
+                print("   Continuing with system default device...")
+                raise DeviceSelectionCancelled("User cancelled device selection")
+            except EOFError:
+                # Handle case where input is closed (e.g., piped input)
+                print("\n\n👋 Input stream closed, using system default device.")
+                raise DeviceSelectionCancelled("Input stream closed during device selection")
 
 
 def list_and_select_device():
@@ -157,7 +178,15 @@ def list_and_select_device():
         return None
     
     # For Linux (non-WSL), use the full PulseAudio-enabled selection
-    return list_and_select_device_linux()
+    try:
+        return list_and_select_device_linux()
+    except DeviceSelectionCancelled:
+        # Re-raise the cancellation exception to be handled by the caller
+        raise
+    except Exception as e:
+        print(f"\n❌ Unexpected error during device selection: {e}")
+        print("   Continuing with system default device...")
+        return None
 
 
 def get_audio_device_info():
