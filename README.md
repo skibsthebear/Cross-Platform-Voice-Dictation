@@ -91,20 +91,36 @@ Replace `your-api-key-here` with your actual OpenAI API key from https://platfor
 Both startup scripts will launch Voice Typing AND AI Fix together:
 
 #### API Mode (uses OpenAI API):
+
+**Linux/macOS:**
 ```bash
 ./startVoice_api.sh
 # Or directly: python voice_ptt.py
 ```
 
+**Windows:**
+```batch
+startVoice_api.bat
+REM Or with PowerShell: .\startVoice_api.ps1
+```
+
 #### GPU Mode (local transcription):
+
+**Linux/macOS:**
 ```bash
 ./startVoice_gpu.sh
 # Or directly: python voice_ptt.py --local
 ```
 
+**Windows:**
+```batch
+startVoice_gpu.bat
+REM Or with PowerShell: .\startVoice_gpu.ps1
+```
+
 To run AI Fix standalone:
 ```bash
-python ai-fix.py
+python ai-fix.py  # All platforms
 ```
 
 ## 🎮 How to Use
@@ -274,6 +290,29 @@ python voice_ptt.py --list-devices
 - Check console logs for errors
 - Ensure no other application is using the microphone
 - Try running with sudo if permission issues
+
+### Windows-Specific Issues
+
+#### Device Selection Automatically Skipped
+This is normal behavior on Windows and WSL for compatibility:
+- **Solution**: Use `python voice_ptt.py --device N` for manual device selection
+- **Check devices**: Use `python voice_ptt.py --list-devices` to see available options
+
+#### PowerShell Execution Policy Error
+If you see "execution of scripts is disabled on this system":
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+#### Batch Scripts Won't Run
+- Make sure you're in the correct directory
+- Try running from Command Prompt instead of PowerShell
+- Use PowerShell scripts (.ps1) as an alternative
+
+#### Virtual Environment Issues
+- Windows: Use `whisper_venv\Scripts\activate.bat`
+- PowerShell: Use `.\whisper_venv\Scripts\Activate.ps1`
+- If activation fails, recreate the virtual environment
 
 ## 🐧 Linux Setup: Global Command Access
 

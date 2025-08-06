@@ -8,6 +8,7 @@ import subprocess
 import json
 import sounddevice as sd
 from config import CHANNELS, DTYPE, PREFERRED_SAMPLE_RATES
+from platform_detection import should_skip_device_selection, detect_operating_system
 
 
 def get_pulseaudio_sources():
@@ -58,8 +59,8 @@ def get_pulseaudio_sources():
         return None
 
 
-def list_and_select_device():
-    """List devices and let user select one"""
+def list_and_select_device_linux():
+    """List devices and let user select one (Linux-specific with PulseAudio)"""
     print("\n📋 Available Input Devices:")
     print("-" * 60)
     
@@ -145,6 +146,18 @@ def list_and_select_device():
             except KeyboardInterrupt:
                 print("\n\n👋 Cancelled by user.")
                 sys.exit(0)
+
+
+def list_and_select_device():
+    """Cross-platform device selection with platform-aware behavior"""
+    # Check if we should skip device selection for Windows/WSL
+    if should_skip_device_selection():
+        print("\n🖥️  Windows/WSL detected - using system default audio device")
+        print("   Use --device N or --list-devices for manual device selection")
+        return None
+    
+    # For Linux (non-WSL), use the full PulseAudio-enabled selection
+    return list_and_select_device_linux()
 
 
 def get_audio_device_info():

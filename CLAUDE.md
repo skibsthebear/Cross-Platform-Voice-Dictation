@@ -18,11 +18,16 @@ The application provides two main features:
    - Manages the overall application lifecycle
    - Handles command-line arguments for API vs local mode
    - Coordinates between different modules
+   - Implements platform-aware device selection logic
+   - Provides informative startup messages with platform detection
 
 2. **audio_device.py** - Audio device management:
-   - Shows device selection menu with actual device names via PulseAudio
+   - Cross-platform device selection with platform-aware behavior
+   - Linux: Shows device selection menu with actual device names via PulseAudio
+   - Windows/WSL: Automatically skips device selection, uses system default
    - Handles device detection and configuration
    - Supports multiple sample rates with automatic fallback
+   - Provides override options for manual device selection
 
 3. **audio_recorder.py** - Audio recording functionality:
    - Manages recording start/stop
@@ -58,6 +63,13 @@ The application provides two main features:
    - Replaces selection with formatted text
    - Supports streaming responses
    - Intelligent formatting with context understanding
+
+10. **platform_detection.py** - Cross-platform compatibility:
+    - Detects operating system (Windows, Linux, macOS)
+    - Identifies Windows Subsystem for Linux (WSL)
+    - Determines whether to skip audio device selection
+    - Provides platform-aware behavior logic
+    - Uses multiple detection methods for reliability
 
 ### Dependencies & External Services
 
@@ -100,6 +112,8 @@ The startup scripts now launch both Voice Typing and AI Fix features together.
 There are two ways to run the complete system:
 
 #### 1. OpenAI API Mode (requires API key)
+
+**Linux/macOS:**
 ```bash
 # Start with device selection menu (launches both Voice Typing and AI Fix)
 ./startVoice_api.sh
@@ -114,7 +128,22 @@ There are two ways to run the complete system:
 ./startVoice_api.sh --list-devices
 ```
 
+**Windows:**
+```batch
+REM Batch script version
+startVoice_api.bat
+startVoice_api.bat --no-device-select
+startVoice_api.bat --device 2
+startVoice_api.bat --list-devices
+
+REM PowerShell version (enhanced error handling)
+.\startVoice_api.ps1
+.\startVoice_api.ps1 --no-device-select
+```
+
 #### 2. Local GPU Mode (uses distil-whisper/distil-large-v3)
+
+**Linux/macOS:**
 ```bash
 # Start with device selection menu (launches both Voice Typing and AI Fix)
 ./startVoice_gpu.sh
@@ -127,6 +156,18 @@ There are two ways to run the complete system:
 
 # List available devices
 ./startVoice_gpu.sh --list-devices
+```
+
+**Windows:**
+```batch
+REM Batch script version
+startVoice_gpu.bat
+startVoice_gpu.bat --no-device-select
+startVoice_gpu.bat --device 2
+
+REM PowerShell version (with GPU detection and error handling)
+.\startVoice_gpu.ps1
+.\startVoice_gpu.ps1 --no-device-select
 ```
 
 Both scripts will start:
@@ -188,11 +229,16 @@ pip install torch transformers accelerate
 ## Key Implementation Details
 
 - **Modular Architecture**: Application is split into focused modules for better maintainability
+- **Cross-Platform Architecture**: Intelligent platform detection with adaptive behavior
+- **Platform Detection**: Multiple detection methods for Windows, Linux, macOS, and WSL environments
 - **Recording State**: Managed by AudioRecorder class
 - **Audio Device Selection**: 
-  - `get_pulseaudio_sources()` retrieves device info from PulseAudio with actual hardware names
-  - `list_and_select_device()` presents interactive menu at startup
-  - Selected device becomes default PulseAudio source via `pactl set-default-source`
+  - **Cross-Platform Logic**: `list_and_select_device()` automatically detects platform and adjusts behavior
+  - **Linux**: `get_pulseaudio_sources()` retrieves device info from PulseAudio with actual hardware names
+  - **Linux**: Interactive menu presented at startup with real device names (AT2020, HyperX, etc.)
+  - **Linux**: Selected device becomes default PulseAudio source via `pactl set-default-source`
+  - **Windows/WSL**: Automatically skips device selection, uses system default with informative messages
+  - **Override Options**: Manual device selection available via `--device N` on all platforms
 - **Audio Device Detection**: `get_audio_device_info()` validates device capabilities and selects optimal sample rate
 - **Audio Storage**: Temporarily saves WAV files in `outputs/` directory before transcription
 - **Transcription**: Transcriber class supports both API and local GPU transcription
@@ -223,6 +269,30 @@ When starting the application:
 4. **Device Configuration**: Selected device is set as PulseAudio default source
 5. **Fallback**: If PulseAudio is unavailable, falls back to sounddevice's generic listing
 
+## Cross-Platform Compatibility
+
+The application now includes intelligent cross-platform detection and behavior:
+
+### Platform Detection
+- **platform_detection.py**: Automatically detects Windows, Linux, macOS, and WSL environments
+- **WSL Detection**: Uses multiple methods to identify Windows Subsystem for Linux:
+  - Checks `/proc/version` for Microsoft/WSL signatures
+  - Looks for `WSL_DISTRO_NAME` environment variable
+  - Detects `WSLENV` environment variable (WSL2)
+
+### Platform-Specific Behavior
+- **Linux (non-WSL)**: Full device selection menu with PulseAudio integration
+- **Windows/WSL**: Automatically skips device selection and uses system default
+  - Shows informative message explaining auto-skip behavior
+  - Provides override instructions for manual device selection
+  - Warns about potential compatibility issues when using manual selection
+
+### Windows-Specific Scripts
+- **startVoice_api.bat**: Windows batch script for OpenAI API mode
+- **startVoice_gpu.bat**: Windows batch script for local GPU mode
+- **startVoice_api.ps1**: PowerShell alternative with enhanced error handling
+- **startVoice_gpu.ps1**: PowerShell GPU script with execution policy warnings
+
 ## Recording Indicator
 
 The application includes a visual recording indicator built with PyQt6:
@@ -236,7 +306,13 @@ The indicator is implemented in `recording_indicator_qt.py` and requires PyQt6 t
 
 ## Important Notes
 
-- Audio device selection menu appears at startup showing actual device names (AT2020, HyperX, etc.)
+### Cross-Platform Behavior
+- **Linux (non-WSL)**: Audio device selection menu appears at startup showing actual device names (AT2020, HyperX, etc.)
+- **Windows/WSL**: Device selection is automatically skipped for compatibility, uses system default
+- **All Platforms**: Manual device selection available via `--device N` and `--list-devices` flags
+- Platform detection is automatic and provides informative startup messages
+
+### General Notes
 - Temporary audio files are cleaned up after transcription
 - `.env` file is gitignored and must contain `OPENAI_API_KEY` for API mode
 - AI Fix requires LM Studio running on `http://127.0.0.1:1234`
@@ -257,12 +333,86 @@ The indicator is implemented in `recording_indicator_qt.py` and requires PyQt6 t
 - Configuration variables are centralized in config.py
 - Supports both float16 (GPU) and float32 (CPU) precision automatically
 
+## Troubleshooting
+
+### Windows/WSL Specific Issues
+
+**Device Selection Skipped**: This is normal behavior on Windows/WSL for compatibility reasons
+- **Solution**: Use `--device N` for manual device selection if needed
+- **Check devices**: Use `--list-devices` to see available options
+
+**PowerShell Execution Policy Error**: 
+- **Error**: "execution of scripts is disabled on this system"
+- **Solution**: Run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
+
+**Virtual Environment Issues**:
+- **Windows**: Use `whisper_venv\Scripts\activate.bat` instead of the Linux path
+- **PowerShell**: Use `.\whisper_venv\Scripts\Activate.ps1`
+
+**PyTorch Installation on Windows**:
+- For CUDA: `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121`
+- For CPU only: `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu`
+
+### General Troubleshooting
+
+**Audio Recording Issues**:
+- Verify microphone permissions in system settings
+- Check if other applications are using the microphone
+- Try `--list-devices` to confirm device availability
+
+**API Errors**:
+- Verify `.env` file contains valid `OPENAI_API_KEY`
+- Check internet connection for API mode
+
 ## Testing Utilities
 
 The repository includes several test scripts:
 
+### Platform and Compatibility Testing
+- **test_platform_detection.py**: Comprehensive platform detection testing suite
+  - Tests OS detection (Windows, Linux, macOS)
+  - Validates WSL detection methods
+  - Verifies device selection skip logic
+  - Tests edge cases and error handling
+
+### Audio Device Testing
 - **test_audio_device_pulse.py**: Interactive device selection and testing with PulseAudio support
 - **test_audio_device.py**: Device testing with recording and analysis
 - **list_audio_devices.py**: Shows devices from multiple sources (ALSA, PulseAudio, sounddevice)
+
+### UI Component Testing
 - **test_qt_indicator.py**: Tests the PyQt6 recording indicator
 - **test_pynput_mouse.py**: Tests mouse position detection for indicator placement
+
+## Recent Changes: Windows/WSL Compatibility Implementation
+
+### New Files Added
+- **platform_detection.py**: Core platform detection module with OS and WSL identification
+- **startVoice_api.bat**: Windows batch script for API mode
+- **startVoice_gpu.bat**: Windows batch script for GPU mode  
+- **startVoice_api.ps1**: PowerShell script with enhanced error handling
+- **startVoice_gpu.ps1**: PowerShell script with GPU detection
+- **test_platform_detection.py**: Comprehensive platform detection test suite
+
+### Modified Files
+- **voice_ptt.py**: Added platform-aware device selection logic and startup messages
+- **audio_device.py**: Implemented cross-platform device selection with auto-skip for Windows/WSL
+- **CLAUDE.md**: Updated with cross-platform documentation and troubleshooting
+- **README.md**: Added Windows-specific instructions and troubleshooting sections
+
+### Key Features Implemented
+- **Automatic Platform Detection**: Detects Windows, Linux, macOS, and WSL environments
+- **Smart Device Selection**: Auto-skips device selection on Windows/WSL, full menu on Linux
+- **Informative User Messages**: Clear explanations of platform-specific behavior
+- **Manual Override Options**: Advanced users can still use `--device N` on any platform
+- **Complete Windows Support**: Native batch and PowerShell scripts with error handling
+- **Comprehensive Testing**: Full test suite validates platform detection across environments
+- **Documentation**: Updated technical and user documentation with Windows-specific guidance
+
+### Backwards Compatibility
+- **Linux Behavior**: Completely unchanged - all existing functionality preserved
+- **Command-Line Arguments**: All existing flags work identically on all platforms  
+- **API Compatibility**: No breaking changes to any existing interfaces
+- **Script Compatibility**: Original Linux scripts continue to work normally
+
+This implementation ensures seamless cross-platform operation while maintaining full backwards compatibility and providing clear, helpful user feedback.

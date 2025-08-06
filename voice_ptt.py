@@ -10,6 +10,7 @@ import argparse
 import threading
 from config import RECORD_KEY_COMBO, EXIT_KEY
 from audio_device import list_and_select_device, list_all_devices, set_device
+from platform_detection import detect_operating_system, should_skip_device_selection
 from audio_recorder import AudioRecorder
 from transcription import Transcriber
 from text_input import TextTyper
@@ -151,22 +152,43 @@ def main():
         list_all_devices()
         sys.exit(0)
     
+    # Detect platform for intelligent defaults
+    should_skip = should_skip_device_selection()
+    
     # Set default device if specified
     if args.device is not None:
+        if should_skip:
+            print("⚠️  Manual device selection on Windows/WSL may have compatibility issues")
         if not set_device(args.device):
             sys.exit(1)
-    elif not args.no_device_select:
-        # Show device selection menu unless skipped
+    elif not args.no_device_select and not should_skip:
+        # Show device selection menu unless skipped or auto-skipped for Windows/WSL
         print("=" * 60)
         print("🎙️  Push-to-Talk Voice Typing")
         print("=" * 60)
         list_and_select_device()
-    
-    if args.no_device_select or args.device is not None:
-        # Only show header if we didn't show device selection
+    elif should_skip and not args.no_device_select:
+        # Auto-skip for Windows/WSL with informative messages
         print("=" * 60)
         print("🎙️  Push-to-Talk Voice Typing")
         print("=" * 60)
+        print("⚠️  Device selection automatically skipped on Windows/WSL")
+        print("   Use --device N for manual device selection")
+        print("   Use --list-devices to see available devices")
+    
+    if args.no_device_select or args.device is not None or should_skip:
+        # Only show header if we didn't show device selection
+        if not should_skip:  # Don't duplicate header for Windows/WSL
+            print("=" * 60)
+            print("🎙️  Push-to-Talk Voice Typing")
+            print("=" * 60)
+    
+    # Show platform information
+    platform_info = f"Platform: {detect_operating_system().title()}"
+    if should_skip:
+        platform_info += " (Device selection auto-skipped)"
+    print(platform_info)
+    print("")
     
     # Create and run the application
     try:
