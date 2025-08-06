@@ -1,258 +1,209 @@
-# Task: Implement Windows/WSL Compatibility for Audio Device Detection
+# Task: Fix AI Fix Double-Pasting Issue
 
-## Research Summary
+## Problem Analysis
 
-### Current Audio Device Detection Flow Analysis
+The AI Fix feature is pasting text twice when Alt+G is pressed. Based on the user's output, we can see these messages appearing twice:
+```
+🔧 AI Fix triggered!
+📋 Capturing highlighted text...
+📝 Captured 54 characters
+🤖 Sending to AI for processing...
+📝 Captured 54 characters
+🤖 Sending to AI for processing...
+..............
+.......✅ Text replaced and clipboard restored!
+.......
+✅ Text replaced and clipboard restored!
+```
 
-**Entry Point**: `voice_ptt.py` main() function
-- Lines 158-163: Calls `list_and_select_device()` unless `--no-device-select` is used
-- Lines 155-157: Allows `--device N` to specify device by index
-- Lines 150-152: Supports `--list-devices` to show available devices
+This indicates that the `handle_fix()` method is being executed twice for a single Alt+G keypress.
 
-**Current Linux-Specific Behavior**:
-1. **PulseAudio Detection** (`audio_device.py:13-60`):
-   - Uses `pactl -f json list sources` to get real hardware device names
-   - Shows interactive device selection menu with actual product names (e.g., "AT2020USB+", "HyperX QuadCast")
-   - Uses `pactl set-default-source` to configure selected device
-   
-2. **Fallback Mechanism** (`audio_device.py:110-147`):
-   - When PulseAudio fails, falls back to `sounddevice.query_devices()`
-   - Shows generic device names from ALSA/system
-   - Sets device using `sounddevice.default.device[0]`
+## Root Cause Investigation
 
-**Identified Issues for Windows/WSL**:
-- `pactl` commands will fail (PulseAudio not typically available)
-- Interactive device selection may not work properly in WSL
-- Bash startup scripts (`.sh` files) won't work on Windows
+After examining the code in `ai-fix.py`, the likely causes are:
 
----
+### 1. **Keyboard Event Handling Issue** (Most Likely)
+- **Problem**: The keyboard listener might be detecting both `Alt+G` key press events twice
+- **Location**: `ai-fix.py:45-58` in the `_on_press()` method
+- **Cause**: The keyboard listener could be receiving duplicate events from the system
 
-## Implementation Plan
+### 2. **Race Condition in Processing Lock** (Possible)  
+- **Problem**: The `processing` flag might not be preventing concurrent execution properly
+- **Location**: `ai-fix.py:241` and `ai-fix.py:245-248`
+- **Cause**: Timing issue where the flag isn't set fast enough before second trigger
 
-### Phase 1: Create OS Detection Module
-**New File**: `platform_detection.py`
+### 3. **Startup Script Launching Multiple Instances** (Less Likely)
+- **Problem**: The startup script might be launching AI Fix multiple times
+- **Location**: `startVoice_api.sh:41-53`
+- **Cause**: The restart loop could cause overlapping instances
 
-#### [x] Step 1.1: Create Platform Detection File
-- [x] Create new file `/home/skibrs/ZaWarudo/Work/Tools/voice_typing/platform_detection.py`
-- [x] Add proper module header and documentation
-- [x] Import required modules: `platform`, `os`
+## Implementation Plan for Non-Programmers
 
-#### [x] Step 1.2: Implement OS Detection Functions
-- [x] Create function `detect_operating_system()` that returns 'linux', 'windows', or 'macos'
-- [x] Create function `is_wsl()` that detects Windows Subsystem for Linux
-- [x] Create function `should_skip_device_selection()` that returns True for Windows/WSL
-- [x] Add comprehensive error handling for edge cases
+### **What We Need to Fix**
 
-#### [x] Step 1.3: Implement Detection Logic
-**For `detect_operating_system()`**:
-- [x] Use `platform.system()` to get base OS
-- [x] Return lowercase string: 'windows', 'linux', 'darwin' → 'macos'
-- [x] Handle edge cases and unknown platforms
+The AI Fix program is responding to the Alt+G keypress twice instead of once, causing it to paste the formatted text two times. This makes the text appear duplicated in your document.
 
-**For `is_wsl()`**:
-- [x] **Method 1**: Check if `/proc/version` file exists and contains "Microsoft" or "WSL"
-- [x] **Method 2**: Check for `WSL_DISTRO_NAME` environment variable
-- [x] **Method 3**: Check for `WSLENV` environment variable (WSL2)
-- [x] Return True if any detection method succeeds
+### **Solution Overview**
 
-**For `should_skip_device_selection()`**:
-- [x] Return True if OS is Windows OR if WSL is detected
-- [x] Return False for Linux (without WSL) and macOS
-- [x] Add logging/debug output for troubleshooting
+We need to add better protection so that when Alt+G is pressed, the program only processes it once, even if the system sends the keypress signal multiple times.
 
-#### [x] Step 1.4: Add Testing and Validation
-- [x] Create test function to validate detection on current system
-- [x] Add debug output showing detected platform information
-- [x] Test edge cases (unknown platforms, missing files, etc.)
+### **Files to Modify**
 
-### Phase 2: Modify Audio Device Module
-**File**: `audio_device.py`
+1. **`ai-fix.py`** - The main AI Fix program file
+2. **Test the fix** - Verify it works correctly
 
-#### [x] Step 2.1: Import Platform Detection
-- [x] Add import statement: `from platform_detection import should_skip_device_selection, detect_operating_system`
-- [x] Add import at top of file after existing imports
+### **Step-by-Step Fix Instructions**
 
-#### [x] Step 2.2: Create Windows-Compatible Device Selection
-- [x] Create new function `list_and_select_device_cross_platform()`
-- [x] This function will replace the current `list_and_select_device()` function
-- [x] Implement platform-aware device selection logic
+#### **Step 1: Improve Keyboard Event Handling**
 
-#### [x] Step 2.3: Implement Cross-Platform Logic
-**In `list_and_select_device_cross_platform()`**:
-- [x] Check if device selection should be skipped using `should_skip_device_selection()`
-- [ ] **If Windows/WSL detected**:
-  - [ ] Print informative message: "=�  Windows/WSL detected - using system default audio device"
-  - [ ] Print additional message: "   Use --device N or --list-devices for manual device selection"
-  - [ ] Return None (use system default)
-  - [ ] Skip interactive menu entirely
-- [ ] **If Linux (non-WSL) detected**:
-  - [ ] Use existing PulseAudio detection logic
-  - [ ] Fall back to sounddevice if PulseAudio unavailable
-  - [ ] Maintain current interactive behavior
+**What to change**: Add better duplicate event prevention in the keyboard handling code.
 
-#### [x] Step 2.4: Update Function References
-- [x] Rename original `list_and_select_device()` to `list_and_select_device_linux()`
-- [x] Update the main `list_and_select_device()` to call the cross-platform version
-- [x] Ensure backward compatibility for any internal calls
+**Location**: In `ai-fix.py`, find the `_on_press` method around line 45.
 
-### Phase 3: Modify Main Application Entry Point  
-**File**: `voice_ptt.py`
+**Current problematic code**:
+```python
+def _on_press(self, key):
+    """Handle key press events"""
+    # Track Alt key state
+    if key in [Key.alt, Key.alt_l, Key.alt_r]:
+        self.alt_pressed = True
+    
+    # Check for Alt+G
+    if self.alt_pressed:
+        try:
+            if hasattr(key, 'char') and key.char == 'g':
+                if self.on_fix_trigger:
+                    self.on_fix_trigger()
+        except:
+            pass
+```
 
-#### [x] Step 3.1: Update Imports
-- [x] Add import: `from platform_detection import detect_operating_system, should_skip_device_selection`
-- [x] Verify audio_device import still works with updated functions
+**What's wrong**: This code doesn't prevent multiple rapid keypresses of 'g' while Alt is held down.
 
-#### [x] Step 3.2: Enhance Command Line Argument Handling
-- [x] In the `main()` function around line 158, add platform detection
-- [x] Modify the device selection logic to be platform-aware
-- [x] Update help messages to mention platform-specific behavior
+**New improved code**:
+```python
+def _on_press(self, key):
+    """Handle key press events"""
+    # Track Alt key state
+    if key in [Key.alt, Key.alt_l, Key.alt_r]:
+        self.alt_pressed = True
+    
+    # Check for Alt+G
+    if self.alt_pressed:
+        try:
+            if hasattr(key, 'char') and key.char == 'g':
+                # Prevent rapid duplicate triggers
+                current_time = time.time()
+                if hasattr(self, 'last_trigger_time'):
+                    if current_time - self.last_trigger_time < 0.5:  # 500ms cooldown
+                        return
+                
+                self.last_trigger_time = current_time
+                if self.on_fix_trigger:
+                    self.on_fix_trigger()
+        except:
+            pass
+```
 
-#### [x] Step 3.3: Implement Platform-Aware Device Selection Logic
-**In `main()` function (around lines 158-163)**:
-- [ ] **Before device selection**: Check if on Windows/WSL
-- [ ] **If Windows/WSL and no explicit device flags**:
-  - [ ] Print platform detection message
-  - [ ] Print auto-skip message: "�  Device selection automatically skipped on Windows/WSL"  
-  - [ ] Print override message: "   Use --device N for manual device selection"
-  - [ ] Skip to application creation
-- [ ] **If explicit device flags provided** (`--device N` or `--list-devices`):
-  - [ ] Allow manual device selection regardless of platform
-  - [ ] Print warning about potential compatibility issues on Windows/WSL
-- [ ] **If Linux (non-WSL)**:
-  - [ ] Maintain current behavior with interactive device selection
+**What this fixes**: Adds a 500-millisecond cooldown period so Alt+G can only trigger once every half second, preventing duplicate processing.
 
-#### [x] Step 3.4: Add Platform Information to Startup Messages
-- [x] Add platform detection info to the startup header
-- [x] Show detected OS and WSL status in debug mode
-- [x] Update version/system info display
+#### **Step 2: Improve Processing Lock**
 
-### Phase 4: Create Windows-Compatible Startup Scripts
-**New Files**: Windows batch/PowerShell scripts
+**What to change**: Make the processing lock more robust to prevent race conditions.
 
-#### [x] Step 4.1: Create Batch Script for API Mode
-- [x] Create `startVoice_api.bat` with Windows batch syntax
-- [x] Convert all bash logic to batch equivalents
-- [x] Handle virtual environment activation: `whisper_venv\Scripts\activate.bat`
-- [x] Check for `.env` file existence
-- [x] Launch both voice typing and AI fix applications
+**Location**: In `ai-fix.py`, find the `handle_fix` method around line 243.
 
-#### [x] Step 4.2: Create Batch Script for GPU Mode
-- [x] Create `startVoice_gpu.bat` with Windows batch syntax
-- [x] Include PyTorch/CUDA dependency checking logic
-- [x] Handle Windows-specific error messages
-- [x] Maintain same functionality as Linux scripts
+**Current code**:
+```python
+def handle_fix(self):
+    """Handle the Alt+G trigger"""
+    if self.processing:
+        print("⏳ Already processing, please wait...")
+        return
+        
+    self.processing = True
+    print("\n🔧 AI Fix triggered!")
+```
 
-#### [x] Step 4.3: Create PowerShell Alternatives (Optional)
-- [x] Create `startVoice_api.ps1` for PowerShell users
-- [x] Create `startVoice_gpu.ps1` for PowerShell users
-- [x] Use PowerShell's better error handling and output formatting
-- [x] Add execution policy warnings/instructions
+**New improved code**:
+```python
+def handle_fix(self):
+    """Handle the Alt+G trigger"""
+    # Use atomic check-and-set to prevent race conditions
+    if getattr(self, 'processing', False):
+        print("⏳ Already processing, please wait...")
+        return
+        
+    # Set processing flag immediately
+    self.processing = True
+    
+    # Add visual feedback that we're starting
+    print(f"\n🔧 AI Fix triggered at {time.strftime('%H:%M:%S')}!")
+```
 
-### Phase 5: Update Configuration and Documentation
-**Files**: `config.py`, `CLAUDE.md`, `README.md`
+**What this fixes**: Makes sure the processing flag is set immediately and adds a timestamp so you can see if multiple triggers are happening.
 
-#### [x] Step 5.1: Update Configuration Module
-- [x] In `config.py`, add platform detection imports if needed
-- [x] Add Windows-specific audio settings if required
-- [x] Document cross-platform configuration options
+#### **Step 3: Add Required Import**
 
-#### [x] Step 5.2: Update CLAUDE.md Documentation  
-- [x] Add section on cross-platform compatibility
-- [x] Document Windows/WSL detection and behavior
-- [x] Update device selection workflow section
-- [x] Add troubleshooting section for Windows/WSL users
-- [x] Document new startup scripts
+**What to change**: Add the `time` import at the top of the file if it's not already there.
 
-#### [x] Step 5.3: Update README.md
-- [x] Update installation instructions for Windows
-- [x] Add Windows-specific virtual environment commands
-- [x] Document batch script usage
-- [x] Add Windows troubleshooting section
+**Location**: At the top of `ai-fix.py`, around line 8.
 
-### Phase 6: Testing and Validation
+**Make sure this line exists**:
+```python
+import time
+```
 
-#### [x] Step 6.1: Create Test Suite
-- [x] Create `test_platform_detection.py` to validate OS detection
-- [x] Test all detection methods (Windows, Linux, WSL, macOS)
-- [x] Verify edge cases and error handling
+### **How to Test the Fix**
 
-#### [x] Step 6.2: Integration Testing
-- [x] Test application startup on simulated Windows environment
-- [x] Verify device selection is properly skipped
-- [x] Test manual device selection with `--device N` still works
-- [x] Confirm sounddevice fallback works correctly
+1. **Start the program**: Run your normal startup script (`./startVoice_api.sh` or similar)
+2. **Select some text**: Highlight any text in a document
+3. **Press Alt+G once**: Hold Alt, press G, release both keys
+4. **Watch the output**: You should only see the processing messages once:
+   ```
+   🔧 AI Fix triggered at 14:30:25!
+   📋 Capturing highlighted text...
+   📝 Captured X characters
+   🤖 Sending to AI for processing...
+   ............
+   ✅ Text replaced and clipboard restored!
+   ```
+5. **Check your document**: The formatted text should appear only once, not twice
 
-#### [x] Step 6.3: Script Testing
-- [x] Validate batch scripts syntax (if Windows available for testing)
-- [x] Test virtual environment activation
-- [x] Verify error handling and user messages
+### **Expected Results After Fix**
 
-#### [x] Step 6.4: Cross-Platform Validation
-- [x] Test on Linux to ensure no regressions
-- [x] Verify PulseAudio detection still works on Linux
-- [x] Confirm WSL detection works in WSL environment
-- [x] Test macOS compatibility if available
+- **Single Processing**: Alt+G will only trigger the formatting once per keypress
+- **Visual Confirmation**: Timestamps in the output will show only one trigger time
+- **No Duplicate Text**: Your formatted text will appear once in your document
+- **Cooldown Protection**: Rapid Alt+G presses won't cause issues
 
----
+### **If the Fix Doesn't Work**
 
-## Implementation Details for Non-Programmers
+If you still see double processing after this fix, it might be caused by:
 
-### Key Concepts
+1. **Multiple AI Fix Processes**: Check if multiple instances are running with `ps aux | grep ai-fix`
+2. **System Keyboard Issues**: Try restarting your computer 
+3. **Startup Script Issue**: The startup script might be launching AI Fix twice
 
-**Platform Detection**: The process of figuring out what operating system (Windows, Linux, macOS) the program is running on.
+### **Backup Plan**
 
-**WSL (Windows Subsystem for Linux)**: A Windows feature that lets you run Linux programs on Windows. It's like Linux running inside Windows.
+If the keyboard cooldown approach doesn't work, we can try a different solution:
 
-**Audio Device Selection**: The current menu that shows up asking you to choose your microphone. This is Linux-specific and doesn't work well on Windows.
+1. **Add Process ID Logging**: Make each AI Fix instance log its process ID
+2. **Check for Multiple Instances**: Detect and prevent multiple AI Fix processes
+3. **Alternative Keyboard Library**: Switch to a different keyboard monitoring approach
 
-**Fallback Behavior**: What the program does when the main approach doesn't work. Instead of showing the device menu, it will just use your system's default microphone.
+### **Files Modified Summary**
 
-**Cross-Platform Compatibility**: Making the program work the same way on different operating systems.
+- **`ai-fix.py`**: Added keyboard event cooldown and improved processing lock
+- **No other files need changes**: This is a focused fix for the specific double-trigger issue
 
-### Files That Will Be Modified
+### **Success Criteria**
 
-1. **`platform_detection.py`** (NEW): Detects what system you're running on
-2. **`audio_device.py`** (MODIFIED): Updates device selection to work on all systems  
-3. **`voice_ptt.py`** (MODIFIED): Main program that starts everything
-4. **`startVoice_api.bat`** (NEW): Windows startup script for API mode
-5. **`startVoice_gpu.bat`** (NEW): Windows startup script for GPU mode
-6. **`CLAUDE.md`** (UPDATED): Technical documentation
-7. **`README.md`** (UPDATED): User-facing documentation
+✅ **Single Trigger**: Alt+G triggers formatting exactly once per keypress  
+✅ **No Duplicate Output**: Console shows processing messages only once  
+✅ **No Duplicate Text**: Formatted text appears once in documents  
+✅ **Responsive**: Fix doesn't slow down or interfere with normal operation  
+✅ **Reliable**: Works consistently across multiple uses  
 
-### What Will Change for Users
-
-**Linux Users**: No changes in behavior - everything works exactly the same
-
-**Windows/WSL Users**: 
-- No more device selection menu (which didn't work anyway)
-- Program automatically uses system default microphone
-- Faster startup (no waiting for device detection to fail)
-- Can still manually select devices with `--device N` if needed
-
-**All Users**: 
-- Clear messages explaining what's happening
-- Better error messages and troubleshooting info
-- Windows users get proper `.bat` scripts to start the program
-
-### Success Criteria
-
- **Windows Detection**: Program correctly identifies Windows and WSL environments  
- **Auto-Skip**: Device selection menu is automatically skipped on Windows/WSL  
- **Linux Compatibility**: Linux behavior remains completely unchanged  
- **Manual Override**: Advanced users can still use `--device N` on any platform  
- **Clear Messages**: Users understand what's happening and why  
- **Windows Scripts**: Proper `.bat` files work like the Linux `.sh` files  
- **No Regressions**: All existing functionality continues to work  
-
-### Testing Checklist
-
-- [ ] Test on pure Linux system - device menu should appear normally
-- [ ] Test on Windows system - device menu should be skipped automatically  
-- [ ] Test on WSL system - device menu should be skipped automatically
-- [ ] Test `--device N` flag works on all platforms
-- [ ] Test `--list-devices` flag works on all platforms
-- [ ] Test `--no-device-select` flag still works as expected
-- [ ] Test Windows batch scripts start the application correctly
-- [ ] Test error handling when sounddevice fails
-- [ ] Verify startup time is not significantly impacted
-- [ ] Confirm all user messages are clear and helpful
+This fix addresses the most common cause of duplicate processing while maintaining all the existing functionality of the AI Fix feature.

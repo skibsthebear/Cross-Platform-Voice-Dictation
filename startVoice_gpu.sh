@@ -21,6 +21,10 @@ cleanup() {
     echo "🛑 Shutting down..."
     # Kill all background processes
     kill $(jobs -p) 2>/dev/null
+    # Force cleanup any remaining AI Fix processes
+    pkill -f "python ai-fix.py" 2>/dev/null || true
+    # Remove lock file if it exists
+    rm -f /tmp/ai-fix.lock 2>/dev/null || true
     echo "✅ Stopped"
     exit 0
 }

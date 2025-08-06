@@ -8,11 +8,68 @@ and replaces the selection with the AI-improved version.
 import time
 import json
 import sys
+import os
+import atexit
 from typing import Optional
 import requests
 import pyperclip
 from pynput import keyboard
 from pynput.keyboard import Key, Controller
+
+
+class SingleInstance:
+    """Ensures only one instance of AI Fix runs at a time"""
+    
+    def __init__(self, lock_file="/tmp/ai-fix.lock"):
+        self.lock_file = lock_file
+        self.fp = None
+        
+    def acquire(self):
+        """Acquire the instance lock"""
+        try:
+            # Check if lock file exists and if process is still running
+            if os.path.exists(self.lock_file):
+                with open(self.lock_file, 'r') as f:
+                    existing_pid = f.read().strip()
+                    
+                # Check if process with that PID is still running
+                if existing_pid and self._is_process_running(existing_pid):
+                    print(f"❌ Another AI Fix instance is already running (PID: {existing_pid})")
+                    print("   Please close the other instance first, or use 'pkill -f ai-fix.py' to force stop all instances")
+                    return False
+                else:
+                    # Remove stale lock file
+                    os.remove(self.lock_file)
+            
+            # Create new lock file with current PID
+            with open(self.lock_file, 'w') as f:
+                f.write(str(os.getpid()))
+            
+            # Register cleanup on exit
+            atexit.register(self.release)
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error acquiring instance lock: {e}")
+            return False
+    
+    def release(self):
+        """Release the instance lock"""
+        try:
+            if os.path.exists(self.lock_file):
+                os.remove(self.lock_file)
+        except:
+            pass
+    
+    def _is_process_running(self, pid):
+        """Check if a process with given PID is running"""
+        try:
+            # Send signal 0 to check if process exists
+            os.kill(int(pid), 0)
+            return True
+        except (OSError, ValueError):
+            return False
 
 
 class KeyboardHandler:
@@ -52,6 +109,13 @@ class KeyboardHandler:
         if self.alt_pressed:
             try:
                 if hasattr(key, 'char') and key.char == 'g':
+                    # Prevent rapid duplicate triggers
+                    current_time = time.time()
+                    if hasattr(self, 'last_trigger_time'):
+                        if current_time - self.last_trigger_time < 0.5:  # 500ms cooldown
+                            return
+                    
+                    self.last_trigger_time = current_time
                     if self.on_fix_trigger:
                         self.on_fix_trigger()
             except:
@@ -242,12 +306,16 @@ class AIFix:
         
     def handle_fix(self):
         """Handle the Alt+G trigger"""
-        if self.processing:
+        # Use atomic check-and-set to prevent race conditions
+        if getattr(self, 'processing', False):
             print("⏳ Already processing, please wait...")
             return
             
+        # Set processing flag immediately
         self.processing = True
-        print("\n🔧 AI Fix triggered!")
+        
+        # Add visual feedback that we're starting
+        print(f"\n🔧 AI Fix triggered at {time.strftime('%H:%M:%S')}!")
         
         try:
             # Capture highlighted text
@@ -299,6 +367,13 @@ class AIFix:
 
 def main():
     """Main entry point"""
+    # Ensure only one instance runs at a time
+    instance_lock = SingleInstance()
+    if not instance_lock.acquire():
+        sys.exit(1)
+    
+    print(f"🔒 AI Fix instance lock acquired (PID: {os.getpid()})")
+    
     app = AIFix()
     try:
         app.run()
@@ -306,6 +381,7 @@ def main():
         print(f"❌ AI Fix error: {e}")
     finally:
         print("👋 AI Fix stopped")
+        instance_lock.release()
 
 
 if __name__ == "__main__":
