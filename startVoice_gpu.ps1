@@ -69,7 +69,7 @@ except Exception as e:
     Start-Sleep -Seconds 2
     
     # Start voice typing application
-    Write-Host "🎤 Starting Voice Typing (Alt+R)..." -ForegroundColor Green
+    Write-Host "🎤 Starting Voice Typing (Right Ctrl)..." -ForegroundColor Green
     
     # Pass all arguments to voice_ptt.py with --local flag
     $arguments = $args -join " "

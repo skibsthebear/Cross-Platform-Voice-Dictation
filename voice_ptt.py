@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Push-to-Talk Voice Typing with OpenAI API
-Press Alt+R to start/stop recording
+Press Right Ctrl to start/stop recording
 Transcribed text is automatically typed at cursor position
 """
 
@@ -221,7 +221,7 @@ class VoiceTypingApp:
         print(f"  • {RECORD_KEY_COMBO}: Start/Stop recording")
         print(f"  • {EXIT_KEY}: Exit")
         print()
-        print("✨ Ready! Press Alt+R to start recording...")
+        print("✨ Ready! Press Right Ctrl to start recording...")
         print("-" * 60)
         
         # Start keyboard listener
@@ -294,6 +294,17 @@ def main():
         platform_info += " (Device selection auto-skipped)"
     print(platform_info)
     print("")
+    
+    # Reload settings to pick up any changes
+    from config import load_settings, SETTINGS
+    SETTINGS.update(load_settings())
+    
+    # Show AI pass-through status
+    if SETTINGS.get('ai_passthrough', False):
+        print("🤖 AI Pass-through: ENABLED")
+        print(f"   Model: {SETTINGS.get('ai_model', 'default')}")
+    else:
+        print("🤖 AI Pass-through: DISABLED")
     
     # Create and run the application
     try:

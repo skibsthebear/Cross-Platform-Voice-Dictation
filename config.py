@@ -54,7 +54,7 @@ except ImportError:
     WHISPER_TORCH_DTYPE = "float32"
 
 # Keyboard shortcuts
-RECORD_KEY_COMBO = "Alt+R"
+RECORD_KEY_COMBO = "Right Ctrl"
 EXIT_KEY = "ESC"
 
 # UI settings
@@ -63,3 +63,31 @@ INDICATOR_OFFSET_Y = 20
 
 # Paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Settings file support
+import json
+
+def load_settings():
+    """Load settings from settings.json"""
+    settings_file = os.path.join(BASE_DIR, 'settings.json')
+    default_settings = {
+        "ai_passthrough": False,
+        "ai_api_url": "http://127.0.0.1:1234/v1/chat/completions",
+        "ai_model": "google/gemma-3n-e4b",
+        "ai_temperature": 0.3,
+        "ai_max_tokens": -1
+    }
+    
+    try:
+        if os.path.exists(settings_file):
+            with open(settings_file, 'r') as f:
+                user_settings = json.load(f)
+                # Merge with defaults to ensure all keys exist
+                return {**default_settings, **user_settings}
+    except Exception as e:
+        print(f"Warning: Could not load settings.json: {e}")
+    
+    return default_settings
+
+# Load settings on module import
+SETTINGS = load_settings()

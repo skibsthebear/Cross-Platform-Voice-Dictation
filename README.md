@@ -4,8 +4,8 @@ A powerful, cross-platform voice typing application with AI-powered text formatt
 
 ## 🌟 Features
 
-### Voice Typing (Alt+R)
-- **Push-to-Talk Recording**: Press `Alt+R` to start/stop recording
+### Voice Typing (Right Ctrl)
+- **Push-to-Talk Recording**: Press `Right Ctrl` to start/stop recording
 - **Dual Transcription Modes**: 
   - **API Mode**: Uses OpenAI's Whisper API (requires API key)
   - **GPU Mode**: Uses local distil-whisper model for faster, offline transcription
@@ -125,12 +125,12 @@ python ai-fix.py  # All platforms
 
 ## 🎮 How to Use
 
-### Voice Typing (Alt+R)
+### Voice Typing (Right Ctrl)
 1. **Start the application** using one of the methods above
 2. **Select your microphone** from the device list (or press Enter for default)
-3. **Press `Alt+R`** to start recording (you'll see a red recording indicator)
+3. **Press `Right Ctrl`** to start recording (you'll see a red recording indicator)
 4. **Speak clearly** into your microphone
-5. **Press `Alt+R` again** to stop recording
+5. **Press `Right Ctrl` again** to stop recording
 6. The transcribed text will be **automatically typed** at your cursor position
 
 ### AI Fix (Alt+G)
@@ -141,7 +141,7 @@ python ai-fix.py  # All platforms
 
 ### General
 - **Press `ESC`** to exit the application
-- Both features work simultaneously - use Alt+R for voice typing and Alt+G for text fixing
+- Both features work simultaneously - use Right Ctrl for voice typing and Alt+G for text fixing
 
 ### Usage Tips
 - **Voice Typing**: Push-to-talk design allows recordings of any length
@@ -204,6 +204,40 @@ python ai-fix.py  # All platforms
    ```
 
 ## 🔧 Troubleshooting
+
+### USB Microphone Not Unmuting
+
+If your USB microphone (like AT2020) doesn't unmute when pressing Right Ctrl:
+
+1. **Check microphone mute status**:
+   ```bash
+   # List all audio sources
+   pactl list sources | grep -A 5 "AT2020\|USB"
+   
+   # Check if muted
+   pactl list sources | grep -A 10 "AT2020" | grep "Mute:"
+   ```
+
+2. **Test unmute manually**:
+   ```bash
+   # Find your microphone name
+   pactl -f json list sources | jq '.[] | select(.properties."device.bus" == "usb") | .name'
+   
+   # Unmute it manually (replace with your device name)
+   pactl set-source-mute alsa_input.usb-AT_AT2020USB-X_202011110001-00.mono-fallback 0
+   ```
+
+3. **Run diagnostic test**:
+   ```bash
+   python test_key_unmute.py
+   ```
+
+4. **Check logs**: The app now shows detailed unmute status messages when Right Ctrl is pressed
+
+5. **Common issues**:
+   - **PulseAudio not running**: Start with `pulseaudio --start`
+   - **Wrong device permissions**: Add user to audio group: `sudo usermod -a -G audio $USER`
+   - **Conflicting audio servers**: Check if both PulseAudio and PipeWire are running
 
 ### CUDA Errors
 
@@ -348,9 +382,8 @@ Add a global command to run voice typing from anywhere:
 
 ### Keyboard Shortcuts
 Default shortcuts (can be modified in code):
-- `Alt+R` - Toggle voice recording
+- `Right Ctrl` - Toggle voice recording
 - `Alt+G` - Format highlighted text with AI
-- `ESC` - Exit application
 
 ### Audio Settings
 ```python

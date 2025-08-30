@@ -4,415 +4,224 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Push-to-Talk Voice Typing and AI Text Formatting application that supports both OpenAI's Whisper API and local GPU-accelerated transcription using distil-whisper models.
+Push-to-Talk Voice Typing and AI Text Formatting application with dual transcription support:
+- **Voice Typing**: Real-time speech-to-text with Right Ctrl push-to-talk
+- **AI Fix**: Intelligent text formatting with Alt+G hotkey
+- Supports OpenAI Whisper API and local GPU (distil-whisper/distil-large-v3)
 
-The application provides two main features:
-1. **Voice Typing**: Records audio when Alt+R is pressed and automatically types the transcribed text at the cursor position
-2. **AI Fix**: Formats and corrects highlighted text when Alt+G is pressed using LM Studio's AI models
+## Commands
 
-## Architecture
-
-### Core Components
-
-1. **voice_ptt.py** - Main application orchestrator that:
-   - Manages the overall application lifecycle
-   - Handles command-line arguments for API vs local mode
-   - Coordinates between different modules
-   - Implements platform-aware device selection logic
-   - Provides informative startup messages with platform detection
-
-2. **audio_device.py** - Audio device management:
-   - Cross-platform device selection with platform-aware behavior
-   - Linux: Shows device selection menu with actual device names via PulseAudio
-   - Windows/WSL: Automatically skips device selection, uses system default
-   - Handles device detection and configuration
-   - Supports multiple sample rates with automatic fallback
-   - Provides override options for manual device selection
-
-3. **audio_recorder.py** - Audio recording functionality:
-   - Manages recording start/stop
-   - Handles audio data capture and storage
-   - Saves temporary WAV files
-
-4. **transcription.py** - Transcription engine:
-   - Supports both OpenAI API and local GPU models
-   - Auto-detects GPU availability (CUDA/MPS/CPU)
-   - Uses distil-whisper/distil-large-v3 for local mode
-
-5. **text_input.py** - Text typing functionality:
-   - Copies transcribed text to clipboard
-   - Types text at cursor position using pynput
-
-6. **keyboard_handler.py** - Keyboard shortcut management:
-   - Listens for Alt+R to toggle recording
-   - Handles ESC key for exit
-
-7. **recording_indicator.py** - Visual feedback:
-   - Manages the recording indicator subprocess
-   - Shows/hides indicator based on recording state
-
-8. **config.py** - Centralized configuration:
-   - Audio settings
-   - Model configurations
-   - Keyboard shortcuts
-
-9. **ai-fix.py** - AI-powered text formatting:
-   - Monitors for Alt+G hotkey
-   - Captures highlighted text via clipboard
-   - Sends text to LM Studio API for processing
-   - Replaces selection with formatted text
-   - Supports streaming responses
-   - Intelligent formatting with context understanding
-
-10. **platform_detection.py** - Cross-platform compatibility:
-    - Detects operating system (Windows, Linux, macOS)
-    - Identifies Windows Subsystem for Linux (WSL)
-    - Determines whether to skip audio device selection
-    - Provides platform-aware behavior logic
-    - Uses multiple detection methods for reliability
-
-### Dependencies & External Services
-
-- **Transcription Options**:
-  1. **OpenAI API Mode**:
-     - Requires OpenAI API key in `.env` file
-     - Uses OpenAI's Whisper API endpoint
-     - No local server required
-  
-  2. **Local GPU Mode**:
-     - Uses distil-whisper/distil-large-v3 model
-     - Automatically detects CUDA GPU, Apple Silicon (MPS), or falls back to CPU
-     - Requires PyTorch, transformers, and accelerate packages
-     - No API key needed
-
-- **AI Text Formatting**:
-  - Requires LM Studio running on `http://127.0.0.1:1234`
-  - Uses LM Studio's OpenAI-compatible API endpoint
-  - Default model: liquid/lfm2-1.2b (configurable)
-  - Supports streaming responses for real-time feedback
-  
-- **Audio Configuration**: 
-  - Device selection menu at startup shows actual hardware names (e.g., AT2020, HyperX, Anker)
-  - Uses PulseAudio (`pactl`) to get real device names instead of generic ALSA identifiers
-  - Selected device is set as the default PulseAudio source for the session
-  - Supports multiple sample rates with automatic detection (44100, 48000, 16000, 22050, 8000 Hz)
-  - Defaults to mono recording with fallback to stereo if needed
-  - Falls back to sounddevice listing if PulseAudio is not available
-
-- **Environment Variables**:
-  - `.env` file contains `OPENAI_API_KEY` for API mode
-  - File is gitignored for security
-
-## Development Commands
-
-### Running the Complete System
-
-The startup scripts now launch both Voice Typing and AI Fix features together.
-
-There are two ways to run the complete system:
-
-#### 1. OpenAI API Mode (requires API key)
-
-**Linux/macOS:**
+### Setup and Installation
 ```bash
-# Start with device selection menu (launches both Voice Typing and AI Fix)
-./startVoice_api.sh
+# Create virtual environment
+python -m venv whisper_venv
+source whisper_venv/bin/activate  # Linux/macOS
+# or: whisper_venv\Scripts\activate.bat  # Windows
 
-# Skip device selection and use system default
-./startVoice_api.sh --no-device-select
+# Install dependencies
+pip install -r requirements.txt
 
-# Use a specific device by index
-./startVoice_api.sh --device 2
+# Additional for GPU mode
+pip install torch transformers accelerate
 
-# List available devices
-./startVoice_api.sh --list-devices
+# For OpenAI API mode
+cp .example.env .env
+# Edit .env to add OPENAI_API_KEY
 ```
 
-**Windows:**
-```batch
-REM Batch script version
-startVoice_api.bat
-startVoice_api.bat --no-device-select
-startVoice_api.bat --device 2
-startVoice_api.bat --list-devices
+### Running the Application
 
-REM PowerShell version (enhanced error handling)
-.\startVoice_api.ps1
-.\startVoice_api.ps1 --no-device-select
-```
-
-#### 2. Local GPU Mode (uses distil-whisper/distil-large-v3)
-
-**Linux/macOS:**
+#### Complete System (Voice + AI Fix)
 ```bash
-# Start with device selection menu (launches both Voice Typing and AI Fix)
-./startVoice_gpu.sh
+# API Mode
+./startVoice_api.sh [options]        # Linux/macOS
+startVoice_api.bat [options]         # Windows
 
-# Skip device selection and use system default
-./startVoice_gpu.sh --no-device-select
+# GPU Mode  
+./startVoice_gpu.sh [options]        # Linux/macOS
+startVoice_gpu.bat [options]         # Windows
 
-# Use a specific device by index
-./startVoice_gpu.sh --device 2
-
-# List available devices
-./startVoice_gpu.sh --list-devices
+# Options:
+#   --no-device-select    Skip device selection menu
+#   --device <N>          Use specific device by index
+#   --list-devices        List available devices and exit
 ```
 
-**Windows:**
-```batch
-REM Batch script version
-startVoice_gpu.bat
-startVoice_gpu.bat --no-device-select
-startVoice_gpu.bat --device 2
-
-REM PowerShell version (with GPU detection and error handling)
-.\startVoice_gpu.ps1
-.\startVoice_gpu.ps1 --no-device-select
-```
-
-Both scripts will start:
-- Voice Typing (Alt+R) - For speech-to-text transcription
-- AI Fix (Alt+G) - For formatting and correcting highlighted text
-
-The GPU mode will:
-- Automatically detect CUDA GPU, Apple Silicon (MPS), or fall back to CPU
-- Install PyTorch dependencies if not already installed
-- Use the distil-whisper/distil-large-v3 model for faster local transcription
-- Show GPU information before starting
-
-### Running Components Individually
-
+#### Individual Components
 ```bash
-# Activate virtual environment
-source whisper_venv/bin/activate
+# Voice Typing
+python voice_ptt.py          # API mode (default)
+python voice_ptt.py --local  # GPU mode
 
-# API Mode (default)
-python voice_ptt.py
-
-# Local GPU Mode
-python voice_ptt.py --local
-
-# Skip device selection
-python voice_ptt.py --no-device-select
-
-# Use specific device
-python voice_ptt.py --device 2
-
-# List all available devices
-python voice_ptt.py --list-devices
-
-# The --api flag is accepted for backwards compatibility
-python voice_ptt.py --api
-
-# Run AI Fix standalone
+# AI Fix standalone
 python ai-fix.py
 ```
 
-### Virtual Environment
-
+### Testing and Debugging
 ```bash
-# Create/recreate virtual environment
-python -m venv whisper_venv
+# Test platform detection
+python test_platform_detection.py
 
-# Activate environment
-source whisper_venv/bin/activate
+# Test audio device selection
+python test_audio_device_pulse.py
 
-# Install dependencies for API mode
-pip install -r requirements.txt
-# or manually:
-pip install sounddevice numpy scipy pynput pyperclip python-dotenv openai PyQt6 requests
+# List all audio devices
+python list_audio_devices.py
 
-# Additional dependencies for GPU mode
-pip install torch transformers accelerate
+# Fix CUDA errors (Linux)
+sudo ./fix_cuda_error.sh
 ```
 
-## Key Implementation Details
+## Architecture
 
-- **Modular Architecture**: Application is split into focused modules for better maintainability
-- **Cross-Platform Architecture**: Intelligent platform detection with adaptive behavior
-- **Platform Detection**: Multiple detection methods for Windows, Linux, macOS, and WSL environments
-- **Recording State**: Managed by AudioRecorder class
-- **Audio Device Selection**: 
-  - **Cross-Platform Logic**: `list_and_select_device()` automatically detects platform and adjusts behavior
-  - **Linux**: `get_pulseaudio_sources()` retrieves device info from PulseAudio with actual hardware names
-  - **Linux**: Interactive menu presented at startup with real device names (AT2020, HyperX, etc.)
-  - **Linux**: Selected device becomes default PulseAudio source via `pactl set-default-source`
-  - **Windows/WSL**: Automatically skips device selection, uses system default with informative messages
-  - **Override Options**: Manual device selection available via `--device N` on all platforms
-- **Audio Device Detection**: `get_audio_device_info()` validates device capabilities and selects optimal sample rate
-- **Audio Storage**: Temporarily saves WAV files in `outputs/` directory before transcription
-- **Transcription**: Transcriber class supports both API and local GPU transcription
-- **Text Input**: Uses `pyperclip` to copy text to clipboard and `pynput` to paste with Ctrl+Shift+V
-  - **Clipboard Restoration**: Automatically restores previous clipboard content after pasting transcribed text
-- **Line Break Handling**: Automatically removes newlines from transcriptions for continuous text
-- **Keyboard Detection**: Custom listener tracks Alt key state to detect Alt+R and Alt+G combinations
-- **Error Handling**: Graceful handling of API errors and audio device issues with automatic fallback
-- **Sample Rate Detection**: Tests multiple rates (8000-96000 Hz) and selects best supported option
-- **AI Text Processing**: 
-  - Captures highlighted text preserving clipboard state
-  - Streams AI responses for real-time feedback
-  - Intelligent formatting with context understanding
-  - Converts spoken formats (e.g., "dot com" → ".com")
-  - Adds appropriate line breaks for emails, lists, and paragraphs
-  - **Clipboard Restoration**: Automatically restores previous clipboard content after text replacement
+### Core Module Structure
 
-## Device Selection Workflow
+```
+voice_typing/
+├── Core Components
+│   ├── voice_ptt.py              # Main orchestrator, CLI argument handling
+│   ├── audio_device.py           # Cross-platform device selection with PulseAudio
+│   ├── audio_recorder.py         # Recording state management, WAV file handling
+│   ├── transcription.py          # Dual-mode transcriber (API/Local GPU)
+│   ├── text_input.py             # Clipboard management, keyboard typing
+│   ├── keyboard_handler.py       # Hotkey detection (Right Ctrl, Alt+G, ESC)
+│   └── recording_indicator.py    # PyQt6 visual feedback management
+│
+├── AI Processing
+│   ├── ai-fix.py                 # Alt+G text formatting handler
+│   └── ai_formatter_shared.py    # Shared LM Studio API client
+│
+├── Platform Support
+│   └── platform_detection.py     # OS/WSL detection, device skip logic
+│
+├── Configuration
+│   ├── config.py                 # Centralized settings, device auto-detection
+│   └── settings.json             # User preferences (AI model, passthrough mode)
+│
+└── Startup Scripts
+    ├── startVoice_*.sh           # Linux/macOS launchers with cleanup traps
+    └── startVoice_*.bat/ps1      # Windows launchers with error handling
+```
 
-When starting the application:
+### Key Design Patterns
 
-1. **PulseAudio Detection**: The app first tries to get device info from PulseAudio using `pactl -f json list sources`
-2. **Device Listing**: Shows actual hardware names (e.g., "AT2020USB+", "HyperX QuadCast S") extracted from device properties
-3. **User Selection**: User can:
-   - Select a device by number (1, 2, 3, etc.)
-   - Press Enter or select 0 for system default
-   - Use Ctrl+C to cancel
-4. **Device Configuration**: Selected device is set as PulseAudio default source
-5. **Fallback**: If PulseAudio is unavailable, falls back to sounddevice's generic listing
+1. **Modular Architecture**: Each module has single responsibility
+2. **Cross-Platform Abstraction**: Platform detection determines behavior
+3. **Dual Transcription Pipeline**: 
+   - API: OpenAI Whisper endpoint
+   - Local: distil-whisper with auto GPU/CPU detection
+4. **Process Management**: Startup scripts handle both Voice and AI Fix with cleanup
+5. **State Management**: 
+   - Recording state in AudioRecorder class
+   - Lock files prevent duplicate AI Fix instances
+6. **Error Recovery**: Automatic restart for AI Fix crashes with exponential backoff
 
-## Cross-Platform Compatibility
+### Audio Device Flow
 
-The application now includes intelligent cross-platform detection and behavior:
+1. **Platform Detection** (`platform_detection.py`):
+   - Linux (non-WSL): Full device selection
+   - Windows/WSL: Auto-skip for compatibility
+   
+2. **Device Selection** (`audio_device.py`):
+   - PulseAudio integration: `pactl -f json list sources`
+   - Shows actual hardware names (e.g., "AT2020USB+")
+   - Sets default source: `pactl set-default-source`
+   - Fallback to sounddevice if PulseAudio unavailable
 
-### Platform Detection
-- **platform_detection.py**: Automatically detects Windows, Linux, macOS, and WSL environments
-- **WSL Detection**: Uses multiple methods to identify Windows Subsystem for Linux:
-  - Checks `/proc/version` for Microsoft/WSL signatures
-  - Looks for `WSL_DISTRO_NAME` environment variable
-  - Detects `WSLENV` environment variable (WSL2)
+3. **Sample Rate Detection** (`get_audio_device_info()`):
+   - Tests rates: 44100, 48000, 16000, 22050, 8000 Hz
+   - Auto-selects best supported rate
+   - Fallback chain for compatibility
 
-### Platform-Specific Behavior
-- **Linux (non-WSL)**: Full device selection menu with PulseAudio integration
-- **Windows/WSL**: Automatically skips device selection and uses system default
-  - Shows informative message explaining auto-skip behavior
-  - Provides override instructions for manual device selection
-  - Warns about potential compatibility issues when using manual selection
+### Clipboard Preservation
 
-### Windows-Specific Scripts
-- **startVoice_api.bat**: Windows batch script for OpenAI API mode
-- **startVoice_gpu.bat**: Windows batch script for local GPU mode
-- **startVoice_api.ps1**: PowerShell alternative with enhanced error handling
-- **startVoice_gpu.ps1**: PowerShell GPU script with execution policy warnings
+Both `text_input.py` and `ai-fix.py` implement clipboard restoration:
+```python
+# Save original clipboard
+original_clipboard = pyperclip.paste()
+# ... perform operations ...
+# Restore clipboard
+pyperclip.copy(original_clipboard)
+```
 
-## Recording Indicator
+### Long-Form Audio Handling
 
-The application includes a visual recording indicator built with PyQt6:
-- Shows a "🔴 Recording" text overlay near the mouse cursor
-- Appears at the mouse position when recording starts (with 20px offset)
-- Features a pulsing opacity animation
-- White text on dark semi-transparent background with rounded corners
-- Automatically closes when recording stops
+For recordings >30 seconds (`config.py`):
+- Chunking: 30-second segments
+- Overlap: 5-second stride for context
+- Automatic in both API and local modes
 
-The indicator is implemented in `recording_indicator_qt.py` and requires PyQt6 to be installed.
+## Important Implementation Details
 
-## Important Notes
+### Settings Configuration (`settings.json`)
+- `ai_passthrough`: Enable/disable AI formatting for transcribed text
+- `ai_model`: LM Studio model selection
+- `ai_temperature`: Response creativity (0.0-1.0)
+- `ai_api_url`: LM Studio endpoint (default: http://127.0.0.1:1234)
 
-### Cross-Platform Behavior
-- **Linux (non-WSL)**: Audio device selection menu appears at startup showing actual device names (AT2020, HyperX, etc.)
-- **Windows/WSL**: Device selection is automatically skipped for compatibility, uses system default
-- **All Platforms**: Manual device selection available via `--device N` and `--list-devices` flags
-- Platform detection is automatic and provides informative startup messages
+### GPU Detection (`config.py`)
+```python
+# Auto-detection order:
+1. CUDA GPU (NVIDIA)
+2. MPS (Apple Silicon)  
+3. CPU fallback with float32
+```
 
-### General Notes
-- Temporary audio files are cleaned up after transcription
-- `.env` file is gitignored and must contain `OPENAI_API_KEY` for API mode
-- AI Fix requires LM Studio running on `http://127.0.0.1:1234`
-- Command-line arguments:
-  - `--api`: Accepted for backwards compatibility but not needed (API is default)
-  - `--local`: Use local GPU model instead of OpenAI API
-  - `--no-device-select`: Skip device selection menu and use system default
-  - `--device <index>`: Use specific device by index number
-  - `--list-devices`: List available devices and exit
-- Keyboard shortcuts:
-  - `Alt+R`: Toggle voice recording and transcription
-  - `Alt+G`: Format and fix highlighted text with AI
-  - `ESC`: Exit the application
-- Requirements.txt includes all dependencies including PyQt6 for the recording indicator and requests for AI Fix
-- Recording indicator requires PyQt6 but the app will still work if PyQt6 is not installed
-- Uses sounddevice instead of PyAudio for better Linux compatibility
-- Uses PulseAudio to get actual hardware device names instead of generic ALSA names
-- Configuration variables are centralized in config.py
-- Supports both float16 (GPU) and float32 (CPU) precision automatically
+### Process Cleanup (`startVoice_*.sh`)
+- Trap handlers for SIGINT/SIGTERM
+- AI Fix PID tracking and cleanup
+- Lock file removal (`/tmp/ai-fix.lock`)
+- Force cleanup with pkill fallback
 
-## Troubleshooting
+### ESC Key Handling (`keyboard_handler.py`)
+- Double-press confirmation to prevent accidental exits
+- Single press during device selection cancels selection
+- Configurable in `config.py`
 
-### Windows/WSL Specific Issues
+### USB Microphone Unmute (`keyboard_handler.py`)
+- Automatically unmutes USB microphones when Right Ctrl is pressed
+- Uses JSON parsing with `pactl -f json list sources` for reliability
+- Prioritizes AT2020 devices when multiple USB mics present
+- Verifies unmute success with retry logic (max 2 attempts)
+- Sets volume to 70% after successful unmute
+- Fallback to legacy parsing for older pactl versions
+- Clear logging for debugging unmute issues
 
-**Device Selection Skipped**: This is normal behavior on Windows/WSL for compatibility reasons
-- **Solution**: Use `--device N` for manual device selection if needed
-- **Check devices**: Use `--list-devices` to see available options
+### Error Codes (`ai-fix.py`)
+- 0: Normal exit
+- 1: Lock acquisition failed (duplicate instance)
+- Other: Crash requiring restart
 
-**PowerShell Execution Policy Error**: 
-- **Error**: "execution of scripts is disabled on this system"
-- **Solution**: Run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
+## Development Guidelines
 
-**Virtual Environment Issues**:
-- **Windows**: Use `whisper_venv\Scripts\activate.bat` instead of the Linux path
-- **PowerShell**: Use `.\whisper_venv\Scripts\Activate.ps1`
+### Adding New Features
+1. Create modular component in separate file
+2. Import and integrate in `voice_ptt.py` or relevant module
+3. Update startup scripts if new process needed
+4. Add configuration to `config.py` or `settings.json`
 
-**PyTorch Installation on Windows**:
-- For CUDA: `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121`
-- For CPU only: `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu`
+### Debugging Audio Issues
+1. Check device with `--list-devices`
+2. Test specific device with `--device N`
+3. Verify PulseAudio: `pactl info`
+4. Check sample rates in `test_audio_device_pulse.py`
 
-### General Troubleshooting
+### Platform-Specific Testing
+1. Use `test_platform_detection.py` to verify OS detection
+2. Test device selection behavior matches platform
+3. Verify startup scripts work on target platform
 
-**Audio Recording Issues**:
-- Verify microphone permissions in system settings
-- Check if other applications are using the microphone
-- Try `--list-devices` to confirm device availability
+### AI Model Configuration
+1. Ensure LM Studio running on port 1234
+2. Load desired model in LM Studio
+3. Update `settings.json` with model name
+4. Test with highlighted text + Alt+G
 
-**API Errors**:
-- Verify `.env` file contains valid `OPENAI_API_KEY`
-- Check internet connection for API mode
+## Critical Files
 
-## Testing Utilities
-
-The repository includes several test scripts:
-
-### Platform and Compatibility Testing
-- **test_platform_detection.py**: Comprehensive platform detection testing suite
-  - Tests OS detection (Windows, Linux, macOS)
-  - Validates WSL detection methods
-  - Verifies device selection skip logic
-  - Tests edge cases and error handling
-
-### Audio Device Testing
-- **test_audio_device_pulse.py**: Interactive device selection and testing with PulseAudio support
-- **test_audio_device.py**: Device testing with recording and analysis
-- **list_audio_devices.py**: Shows devices from multiple sources (ALSA, PulseAudio, sounddevice)
-
-### UI Component Testing
-- **test_qt_indicator.py**: Tests the PyQt6 recording indicator
-- **test_pynput_mouse.py**: Tests mouse position detection for indicator placement
-
-## Recent Changes: Windows/WSL Compatibility Implementation
-
-### New Files Added
-- **platform_detection.py**: Core platform detection module with OS and WSL identification
-- **startVoice_api.bat**: Windows batch script for API mode
-- **startVoice_gpu.bat**: Windows batch script for GPU mode  
-- **startVoice_api.ps1**: PowerShell script with enhanced error handling
-- **startVoice_gpu.ps1**: PowerShell script with GPU detection
-- **test_platform_detection.py**: Comprehensive platform detection test suite
-
-### Modified Files
-- **voice_ptt.py**: Added platform-aware device selection logic and startup messages
-- **audio_device.py**: Implemented cross-platform device selection with auto-skip for Windows/WSL
-- **CLAUDE.md**: Updated with cross-platform documentation and troubleshooting
-- **README.md**: Added Windows-specific instructions and troubleshooting sections
-
-### Key Features Implemented
-- **Automatic Platform Detection**: Detects Windows, Linux, macOS, and WSL environments
-- **Smart Device Selection**: Auto-skips device selection on Windows/WSL, full menu on Linux
-- **Informative User Messages**: Clear explanations of platform-specific behavior
-- **Manual Override Options**: Advanced users can still use `--device N` on any platform
-- **Complete Windows Support**: Native batch and PowerShell scripts with error handling
-- **Comprehensive Testing**: Full test suite validates platform detection across environments
-- **Documentation**: Updated technical and user documentation with Windows-specific guidance
-
-### Backwards Compatibility
-- **Linux Behavior**: Completely unchanged - all existing functionality preserved
-- **Command-Line Arguments**: All existing flags work identically on all platforms  
-- **API Compatibility**: No breaking changes to any existing interfaces
-- **Script Compatibility**: Original Linux scripts continue to work normally
-
-This implementation ensures seamless cross-platform operation while maintaining full backwards compatibility and providing clear, helpful user feedback.
+- **voice_ptt.py**: Entry point, argument parsing, module coordination
+- **audio_device.py**: Platform-aware device selection logic
+- **config.py**: All configuration constants, auto-detection
+- **platform_detection.py**: WSL/OS detection for behavior switching
+- **ai_formatter_shared.py**: Shared AI formatting client
+- **startVoice_*.sh**: Process management, cleanup handlers

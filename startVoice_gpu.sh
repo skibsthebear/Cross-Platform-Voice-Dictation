@@ -133,7 +133,7 @@ AI_FIX_PID=$!
 # Give AI Fix a moment to start
 sleep 1
 
-echo "🎤 Starting Voice Typing (Alt+R)..."
+echo "🎤 Starting Voice Typing (Right Ctrl)..."
 
 # Pass all arguments to voice_ptt.py with --local flag
 python voice_ptt.py --local "$@"

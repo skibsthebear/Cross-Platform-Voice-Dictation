@@ -102,7 +102,7 @@ AI_FIX_PID=$!
 sleep 1
 
 # Start voice typing application
-echo "🎤 Starting Voice Typing (Alt+R)..."
+echo "🎤 Starting Voice Typing (Right Ctrl)..."
 
 # Pass all arguments to voice_ptt.py (API mode is default)
 python voice_ptt.py "$@"

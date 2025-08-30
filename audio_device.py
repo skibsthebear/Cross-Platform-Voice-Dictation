@@ -108,6 +108,17 @@ def list_and_select_device_linux():
                             selected['name']
                         ], check=True, capture_output=True)
                         print("   Set as default PulseAudio source")
+                        
+                        # Unmute the source after setting it as default
+                        # This fixes the auto-mute issue with USB microphones
+                        try:
+                            subprocess.run([
+                                'pactl', 'set-source-mute', 
+                                selected['name'], '0'
+                            ], check=True, capture_output=True)
+                            print("   Ensured microphone is unmuted")
+                        except:
+                            pass  # Silent fail, not critical
                     except:
                         print("   ⚠️  Could not set as default source")
                     return selected

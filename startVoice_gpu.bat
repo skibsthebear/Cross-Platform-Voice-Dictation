@@ -41,7 +41,7 @@ REM Give AI Fix a moment to start
 timeout /t 2 /nobreak >nul
 
 REM Start voice typing application
-echo 🎤 Starting Voice Typing (Alt+R)...
+echo 🎤 Starting Voice Typing (Right Ctrl)...
 
 REM Pass all arguments to voice_ptt.py with --local flag
 python voice_ptt.py --local %*

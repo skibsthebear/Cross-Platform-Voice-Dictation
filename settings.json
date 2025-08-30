@@ -1,0 +1,7 @@
+{
+  "ai_passthrough": true,
+  "ai_api_url": "http://127.0.0.1:1234/v1/chat/completions",
+  "ai_model": "google/gemma-3n-e4b",
+  "ai_temperature": 0.3,
+  "ai_max_tokens": -1
+}
